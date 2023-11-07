@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.7.34221.43
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MonsterTCG", "MonsterTCG.csproj", "{373FE3B6-813C-4EAE-B2BC-70A7D0AB0BFF}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{373FE3B6-813C-4EAE-B2BC-70A7D0AB0BFF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{373FE3B6-813C-4EAE-B2BC-70A7D0AB0BFF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{373FE3B6-813C-4EAE-B2BC-70A7D0AB0BFF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{373FE3B6-813C-4EAE-B2BC-70A7D0AB0BFF}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {A7A62BAC-8CAC-4CF3-947A-C79F66593DF2}
+	EndGlobalSection
+EndGlobal
