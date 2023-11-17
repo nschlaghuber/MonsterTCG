@@ -1,8 +1,12 @@
 {
   "version": 2,
-  "dgSpecHash": "BEkM0iFKuU6uqYEEFpcHCf+7kHYEyTjqV54cGLvplpY/B2xYi1unO7x4OFstQ6qARidJkzlIMu9atTALm9DoOA==",
+  "dgSpecHash": "OQ/7c4IaRhon87tOEyDE9la2EpcpOk9BWjo9Ap0WwWyai1Zb1wfdxVUc064HlYQhYQOUVdv3mp6TJiwQbBqG9g==",
   "success": true,
   "projectFilePath": "C:\\Users\\nschl\\Uni\\Git\\MonsterTCG\\MonsterTCG.csproj",
-  "expectedPackageFiles": [],
+  "expectedPackageFiles": [
+    "C:\\Users\\nschl\\.nuget\\packages\\microsoft.extensions.logging.abstractions\\6.0.0\\microsoft.extensions.logging.abstractions.6.0.0.nupkg.sha512",
+    "C:\\Users\\nschl\\.nuget\\packages\\newtonsoft.json\\13.0.3\\newtonsoft.json.13.0.3.nupkg.sha512",
+    "C:\\Users\\nschl\\.nuget\\packages\\npgsql\\7.0.6\\npgsql.7.0.6.nupkg.sha512"
+  ],
   "logs": []
 }
