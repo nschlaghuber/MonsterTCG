@@ -400,3 +400,6 @@ FodyWeavers.xsd
 .idea/
 /meili_data
 /docker/sftp/share/*
+
+*.cache 
+*.json
