@@ -1,82 +1,137 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net;
-using System.Text;
-using System.Text.Json.Nodes;
-using System.Text.Json;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
+﻿using System.Net;
+using MonsterTCG.Model;
 using MonsterTCG.Model.Http;
-using Npgsql;
 using MonsterTCG.Repository;
-using MonsterTCG.Controller.Interface;
+using MonsterTCG.Util;
 using Newtonsoft.Json.Linq;
-using Newtonsoft.Json;
+using HttpMethod = MonsterTCG.Model.Http.HttpMethod;
 
 namespace MonsterTCG.Controller
 {
-    public class UserController : IHttpController
+    public class UserController : Controller
     {
-        private HttpServer httpServer;
-        private UserRepository userRepository;
+        private readonly UserRepository _userRepository;
 
-        public UserController(HttpServer httpServer, UserRepository userRepository)
+        public UserController(UserRepository userRepository)
         {
-            this.httpServer = httpServer;
-            this.userRepository = userRepository;
-
-            this.httpServer.IncomingRequest += _ProcessRequest;
+            _userRepository = userRepository;
         }
 
-        public void _ProcessRequest(object sender, HttpRequestEventArgs e)
+        public override bool ProcessRequest(HttpRequestEventArgs e)
         {
-            HttpRequest request = e.Request;
-
-            switch(request?.Path)
-            {
-                case "/users":
-                    JObject payloadObject = (JObject)JsonConvert.DeserializeObject(request.Payload);
-#
-                    payloadObject.TryGetPropertyValue<string>("Username", out string username);
-
-                    payloadObject.TryGetPropertyValue<string>("Password", out var password);
-
-                    userRepository.CreateUser(username, password?.ToString());
-                    break;
-                case var path when new Regex().IsMatch(path):
-
-                    break;
-                default:
-                    e.Reply(HttpStatusCode.NotFound); 
-                    break;
-            }
-        }
-
-        private void CreateUser(HttpRequestEventArgs httpRequestEventArgs)
-        {
-            JsonObject userData = JsonSerializer.Deserialize<JsonObject>(httpRequestEventArgs.Request.Payload);
-
             try
             {
-                userData.TryGetPropertyValue("Username", out var username);
-                userData.TryGetPropertyValue("Password", out var password);
-
-                var createUserCommand = new NpgsqlCommand(
-                    @$"INSERT INTO Users (Username, Password, Eloscore)
-                    VALUES ({username}, {password}, 500)
-                    ");
-
-                _dbConnection?.Open();
-                createUserCommand.ExecuteNonQuery();
-                _dbConnection?.Close();
+                var test = e.Request.Path.TrimStart('/').Split('/');
+                switch (test)
+                {
+                    case ["users"] when e.Request.Method == HttpMethod.POST:
+                        RegisterUser(e);
+                        return true;
+                    case ["users", _] parts when e.Request.Method == HttpMethod.GET:
+                        GetUser(parts[1], e);
+                        return true;
+                    case ["sessions"] when e.Request.Method == HttpMethod.POST:
+                        LoginUser(e);
+                        return true;
+                    default:
+                        return false;
+                }
             }
-            catch (Exception e)
+            catch (Exception)
             {
-                return new HttpResponse() { StatusCode = HttpStatusCode.BadRequest, Message = "Request body is invalid." };
+                e.Reply(HttpStatusCode.InternalServerError, "An unknown error has occured");
+                return true;
+            }
+        }
+
+        public async void RegisterUser(HttpRequestEventArgs httpRequestEventArgs)
+        {
+            var payloadObject = JObject.Parse(httpRequestEventArgs.Request.Payload);
+
+            var username = (string?)payloadObject["Username"];
+            var password = (string?)payloadObject["Password"];
+
+            if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
+            {
+                httpRequestEventArgs.Reply(HttpStatusCode.BadRequest, "Please provide username and password");
+                return;
             }
 
-            return new HttpResponse() { StatusCode = HttpStatusCode.Created, Message = "User successfully created" };
+            if (await _userRepository.ExistsByUsername(username))
+            {
+                httpRequestEventArgs.Reply(HttpStatusCode.BadRequest, "User with same username already registered");
+                return;
+            }
+
+            if((await _userRepository.CreateUser(new User(username, password))) == null)
+            {
+                httpRequestEventArgs.Reply(HttpStatusCode.InternalServerError, "An unknown error has occured");
+                return;
+            }
+
+            httpRequestEventArgs.Reply(HttpStatusCode.Created, "User successfully created");
+        }
+
+        public async void GetUser(string username, HttpRequestEventArgs httpRequestEventArgs)
+        {
+            var token = httpRequestEventArgs.GetBearerToken();
+
+            if (token == null || TokenUtil.GetUsernameFromToken(token) != "admin" || TokenUtil.GetUsernameFromToken(token) != username)
+            {
+                httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
+                return;
+            }
+
+            var user = await _userRepository.FindUserByUsername(username);
+
+            if (user == null)
+            {
+                httpRequestEventArgs.Reply(HttpStatusCode.NotFound, "User not found");
+            }
+
+            httpRequestEventArgs.Reply(HttpStatusCode.OK, "Data successfully retrieved");
+        }
+
+        public async void UpdateUser(HttpRequestEventArgs httpRequestEventArgs)
+        {
+            var payloadObject = JObject.Parse(httpRequestEventArgs.Request.Payload);
+
+
+
+            throw new NotImplementedException();
+        }
+
+        public async void LoginUser(HttpRequestEventArgs httpRequestEventArgs)
+        {
+            var payloadObject = JObject.Parse(httpRequestEventArgs.Request.Payload);
+
+            if (!payloadObject.TryGetValue("Username", out JToken? usernameJToken))
+            {
+                httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Invalid username/password provided");
+                return;
+            }
+            if (!payloadObject.TryGetValue("Password", out JToken? passwordJToken))
+            {
+                httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Invalid username/password provided");
+                return;
+            }
+
+            var username = (string?)usernameJToken;
+            var password = (string?)passwordJToken;
+
+            if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
+            {
+                httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Invalid username/password provided");
+                return;
+            }
+
+            if (!await _userRepository.AuthorizeUser(username, password))
+            {
+                httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Invalid username/password provided");
+                return;
+            }
+
+            httpRequestEventArgs.Reply(HttpStatusCode.OK, "User login successful\n" + TokenUtil.GetTokenFromUsername(username));
         }
     }
 }

@@ -9,6 +9,6 @@ namespace MonsterTCG.Controller.Interface
 {
     public interface IHttpController
     {
-        void _ProcessRequest(object sender, HttpRequestEventArgs e);
+        public bool ProcessRequest(HttpRequestEventArgs e);
     }
 }

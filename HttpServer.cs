@@ -1,22 +1,13 @@
 ﻿using MonsterTCG.Model.Http;
-using Npgsql;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
-using System.Text.Json;
-using System.Text.Json.Nodes;
-using System.Threading.Tasks;
 
 namespace MonsterTCG
 {
     public class HttpServer
     {
-        private string CONNECTION_STRING = "Host=localhost;Username=postgres;Password=;Database=monsterTCG";
-
-        private TcpListener? _tcpListener;
+        private Socket? listener;
 
         public event HttpRequestEventHandler? IncomingRequest;
         public bool Active { get; set; } = false;
@@ -27,9 +18,10 @@ namespace MonsterTCG
 
             Active = true;
 
-            _tcpListener = new TcpListener(new IPEndPoint(IPAddress.Loopback, port));
+            listener = new Socket(IPAddress.Loopback.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+            listener.Bind(new IPEndPoint(IPAddress.Loopback, port));
 
-            _tcpListener.Start();
+            listener.Listen();
 
             Console.WriteLine($"Tcp Server has started listening on {IPAddress.Loopback}:{port}.");
 
@@ -37,16 +29,16 @@ namespace MonsterTCG
 
             while (Active)
             {
-                TcpClient tcpClient = _tcpListener.AcceptTcpClient();
+                Socket client = listener.Accept();
 
                 string data = string.Empty;
-                while (tcpClient.GetStream().DataAvailable || (string.IsNullOrEmpty(data)))
+                do
                 {
-                    int dataLength = tcpClient.GetStream().Read(buffer, 0, buffer.Length);
+                    int dataLength = client.Receive(buffer);
                     data += Encoding.ASCII.GetString(buffer, 0, dataLength);
-                }
+                } while (String.IsNullOrEmpty(data));
 
-                IncomingRequest?.Invoke(this, new HttpRequestEventArgs(tcpClient, new HttpRequest(data)));
+                IncomingRequest?.Invoke(this, new HttpRequestEventArgs(client, new HttpRequest(data)));
             }
         }
     }

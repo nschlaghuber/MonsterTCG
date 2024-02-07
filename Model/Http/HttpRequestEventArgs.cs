@@ -1,52 +1,69 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
+﻿using System.ComponentModel.DataAnnotations;
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Sockets;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace MonsterTCG.Model.Http
 {
     public class HttpRequestEventArgs : EventArgs
     {
-        protected TcpClient _Client;
-        public HttpRequestEventArgs(TcpClient client, HttpRequest request)
+        protected readonly Socket Client;
+        public HttpRequestEventArgs(Socket client, HttpRequest request)
         {
-            _Client = client;
+            this.Client = client;
             Request = request;
         }
-        public virtual HttpRequest Request { get; private set; }
+        public virtual HttpRequest Request { get; }
 
-        public virtual void Reply(HttpStatusCode status, string? payload = null)
+        public virtual string? GetBearerToken()
         {
-            string data;
+            var authHeader = Request.GetAuthorizationHeader();
+
+            return authHeader is { Item1: "Bearer" } ? authHeader.Value.Item2 : null;
+        }
+
+        public virtual void Reply(HttpStatusCode status, string? payload)
+        {
+            var responseBuilder = new StringBuilder();
 
             switch (status)
             {
                 case HttpStatusCode.OK:
-                    data = "HTTP/1.1 200 OK\n"; break;
+                    responseBuilder.AppendLine("HTTP/1.1 200 OK"); break;
+                case HttpStatusCode.Created:
+                    responseBuilder.AppendLine("HTTP/1.1 201 Created"); break;
+                case HttpStatusCode.NoContent:
+                    responseBuilder.AppendLine("HTTP/1.1 204 No Content"); break;
                 case HttpStatusCode.BadRequest:
-                    data = "HTTP/1.1 400 Bad Request\n"; break;
+                    responseBuilder.AppendLine("HTTP/1.1 400 Bad Request"); break;
+                case HttpStatusCode.Unauthorized:
+                    responseBuilder.AppendLine("HTTP/1.1 401 Unauthorized"); break;
+                case HttpStatusCode.Forbidden:
+                    responseBuilder.AppendLine("HTTP/1.1 403 Forbidden"); break;
                 case HttpStatusCode.NotFound:
-                    data = "HTTP/1.1 404 Not Found\n"; break;
+                    responseBuilder.AppendLine("HTTP/1.1 404 Not Found"); break;
+                case HttpStatusCode.Conflict:
+                    responseBuilder.AppendLine("HTTP/1.1 409 Conflict"); break;
+                case HttpStatusCode.InternalServerError:
+                    responseBuilder.AppendLine("HTTP/1.1 500 Internal Server Error"); break;
                 default:
-                    data = "HTTP/1.1 418 I'm a Teapot\n"; break;
+                    responseBuilder.AppendLine("HTTP/1.1 418 I'm a Teapot"); break;
             }
 
-            if (string.IsNullOrEmpty(payload))
+            responseBuilder.AppendLine("Content-Type: text/plain");
+
+            responseBuilder.AppendLine($"Content-Length: {(payload != null ? Encoding.ASCII.GetByteCount(payload) : "0")}");
+
+            if (!string.IsNullOrEmpty(payload)) 
             {
-                data += "Content-Length: 0\n";
+                responseBuilder.AppendLine();
+                responseBuilder.Append(payload); 
             }
-            data += "Content-Type: text/plain\n";
-
-            if (!string.IsNullOrEmpty(payload)) { data += payload; }
-
-            byte[] buffer = Encoding.ASCII.GetBytes(data);
-            _Client.GetStream().Write(buffer, 0, buffer.Length);
-            _Client.Close();
-            _Client.Dispose();
+            var test = responseBuilder.ToString();
+            var buffer = Encoding.ASCII.GetBytes(responseBuilder.ToString());
+            Client.Send(buffer);
+            Client.Close();
+            Client.Dispose();
         }
     }
 }

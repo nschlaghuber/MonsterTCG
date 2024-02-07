@@ -17,11 +17,31 @@ namespace MonsterTCG.Model.Http
 
     public class HttpRequest
     {
-        public string PlainMessage { get; set; }
+        public string PlainMessage
+        {
+            get {
+                if (plainMessage == null)
+                {
+                    return $"{Method} {Path} HTTP/1.1\r\n" +
+                           $"Host: localhost:10001\r\n" +
+                           $"User-Agent: curl/8.4.0\r\n" +
+                           $"Accept: */*\r\n" +
+                           $"Content-Type: application/json\r\n" +
+                           $"Content-Length: {(Payload != null ? Encoding.ASCII.GetByteCount(Payload) : "0")}\r\n" +
+                           $"\r\n" +
+                           $"{Payload}";
+                }
+                return plainMessage;
+            }
+            set { plainMessage = value.ToString(); }
+        }
+        private string plainMessage;
         public HttpMethod Method { get; set; }
         public List<HttpHeader> Headers { get; set; } 
         public string Path { get; set; } = string.Empty;
         public string Payload { get; set; }
+
+        public HttpRequest() { }
 
         public HttpRequest(string plainMessage)
         {
@@ -56,6 +76,17 @@ namespace MonsterTCG.Model.Http
             }
 
             Headers = headers.ToList();
+        }
+
+        public (string, string)? GetAuthorizationHeader()
+        {
+            HttpHeader? authHeader = Headers.First(header => header.Name == "Authorization");
+            if (authHeader == null)
+            {
+                return null;
+            }
+            string[] parts = authHeader.Value.Split(' ');
+            return (parts[0], parts[1]);
         }
     }
 }
