@@ -29,6 +29,18 @@ public class TableBuilder
             }
         ),
         new SqlTableDefinition(
+            "deck",
+            new List<SqlColumnDefinition>()
+            {
+                new("deck_id", SqlDataType.Varchar50, isPrimaryKey: true),
+                new("card_id_1", SqlDataType.Varchar50),
+                new("card_id_2", SqlDataType.Varchar50),
+                new("card_id_3", SqlDataType.Varchar50),
+                new("card_id_4", SqlDataType.Varchar50),
+                new("card_id_5", SqlDataType.Varchar50),
+            }
+        ),
+        new SqlTableDefinition(
             "user",
             new List<SqlColumnDefinition>()
             {
@@ -37,6 +49,7 @@ public class TableBuilder
                 new("password", SqlDataType.Varchar50, isNullable: false),
                 new("user_data_id", SqlDataType.Varchar50,
                     foreignKey: new SqlForeignKey("user_data", "user_data_id")),
+                new("deck_id", SqlDataType.Varchar50, foreignKey: new SqlForeignKey("deck", "deck_id")),
                 new("coins", SqlDataType.Integer, isNullable: false),
                 new("user_stats_id", SqlDataType.Varchar50,
                     foreignKey: new SqlForeignKey("user_stats", "user_stats_id"))
@@ -77,13 +90,6 @@ public class TableBuilder
                 "PRIMARY KEY (user_id, card_id)"
             }
         ),
-        new SqlTableDefinition(
-            "deck",
-            new List<SqlColumnDefinition>()
-            {
-                new("deck_id", SqlDataType.Varchar50, isPrimaryKey: true)
-            }
-        )
     }; 
 
     public TableBuilder(NpgsqlDataSource dataSource)

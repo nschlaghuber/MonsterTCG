@@ -8,8 +8,11 @@ namespace MonsterTCG.Repository
 {
     public class UserRepository : Repository
     {
-        public UserRepository(NpgsqlDataSource dataSource) : base(dataSource)
+        private readonly CardRepository _cardRepository;
+
+        public UserRepository(NpgsqlDataSource dataSource, CardRepository cardRepository) : base(dataSource)
         {
+            _cardRepository = cardRepository;
         }
 
         /// <summary>
@@ -23,10 +26,11 @@ namespace MonsterTCG.Repository
             {
                 await using var connection = await DataSource.OpenConnectionAsync();
                 await using var findUserCommand = new NpgsqlCommand(
-                    "SELECT user_id, username, password, name, bio, image, coins, elo_score, wins, losses\n" +
+                    "SELECT user_id, username, password, name, bio, image, deck_id, coins, elo_score, wins, losses\n" +
                     "FROM \"user\"\n" +
                     "INNER JOIN user_data ON \"user\".user_data_id = user_data.user_data_id\n" +
                     "INNER JOIN user_stats ON \"user\".user_stats_id = user_stats.user_stats_id\n" +
+                    "INNER JOIN deck ON \"user\".deck_id" +
                     "WHERE username = @username",
                     connection);
 
@@ -40,9 +44,12 @@ namespace MonsterTCG.Repository
                     return null;
                 }
 
-                var userCards = await FindUserCards(findUserReader.GetString((0)));
+                var userCards = await FindUserCards(findUserReader.GetString(0));
+
+                var userDeck = await FindDeckFromId(findUserReader.GetString(7));
 
                 return new User(
+                    findUserReader.GetString(0),
                     findUserReader.GetString(1),
                     findUserReader.GetString(2),
                     new UserData(
@@ -50,11 +57,12 @@ namespace MonsterTCG.Repository
                         findUserReader.GetString(4),
                         findUserReader.GetString(5)),
                     userCards,
+                    userDeck,
                     findUserReader.GetInt32(6),
                     new UserStats(
-                        findUserReader.GetInt32(7),
                         findUserReader.GetInt32(8),
-                        findUserReader.GetInt32(9))
+                        findUserReader.GetInt32(9),
+                        findUserReader.GetInt32(10))
                 );
             }
             catch (Exception e)
@@ -93,6 +101,42 @@ namespace MonsterTCG.Repository
             return userCards;
         }
 
+        private async Task<(Card? card1, Card? card2, Card? card3, Card? card4)> FindDeckFromId(string deckId)
+        {
+            await using var connection = await DataSource.OpenConnectionAsync();
+            await using var findDeckCommand = new NpgsqlCommand(
+                "SELECT * FROM deck\n" +
+                "WHERE deck_id = @deckId",
+                connection);
+
+            findDeckCommand.Parameters.AddWithValue("@deckId", deckId);
+
+            await findDeckCommand.PrepareAsync();
+            await using var findDeckReader = await findDeckCommand.ExecuteReaderAsync();
+
+            if (!await findDeckReader.ReadAsync())
+            {
+                return (null, null, null, null);
+            }
+
+            var deckCardIds = new List<string>
+            {
+                findDeckReader.GetString(1),
+                findDeckReader.GetString(2),
+                findDeckReader.GetString(3),
+                findDeckReader.GetString(4),
+                findDeckReader.GetString(5),
+            };
+
+            await findDeckReader.DisposeAsync();
+
+            var deckCards = (await _cardRepository.FindCardsByIds(deckCardIds))?.ToList();
+
+            return deckCards is null ? 
+                (null, null, null, null) : 
+                (deckCards[0], deckCards[1], deckCards[2], deckCards[3]);
+        }
+
         public async Task<bool> ExistsByUsername(string username)
         {
             await using var connection = await DataSource.OpenConnectionAsync();
@@ -108,6 +152,30 @@ namespace MonsterTCG.Repository
             await findUserExistsReader.ReadAsync();
 
             return findUserExistsReader.GetBoolean(0);
+        }
+
+        public async Task<bool> HasCardsFromIds(User user, List<string> cardIds)
+        {
+            await using var connection = await DataSource.OpenConnectionAsync();
+            await using var findUserCardsCommand = new NpgsqlCommand(
+                "SELECT card_id FROM user_card\n" +
+                "WHERE user_id = @userId AND card_id = ANY(@cardIds)",
+                connection);
+
+            findUserCardsCommand.Parameters.AddWithValue("@userId", user.Id);
+            findUserCardsCommand.Parameters.AddWithValue("@cardIds", cardIds);
+
+            await findUserCardsCommand.PrepareAsync();
+            await using var findUserCardsReader = await findUserCardsCommand.ExecuteReaderAsync();
+
+            var rowCount = 0;
+
+            while (await findUserCardsReader.ReadAsync())
+            {
+                rowCount++;
+            }
+
+            return rowCount == cardIds.Count;
         }
 
         public async Task<User?> CreateUser(User user)
@@ -204,7 +272,7 @@ namespace MonsterTCG.Repository
         {
             var oldUser = await FindUserByUsername(user.Username);
 
-            if (oldUser == null)
+            if (oldUser is null)
             {
                 return null;
             }
@@ -212,10 +280,10 @@ namespace MonsterTCG.Repository
             await using var connection = await DataSource.OpenConnectionAsync();
             await using var findUserKeysCommand = new NpgsqlCommand(
                 "SELECT user_id, user_data_id, user_stats_id FROM \"user\" " +
-                "WHERE \"user\".username = @username",
+                "WHERE \"user\".user_id = @userId",
                 connection);
 
-            findUserKeysCommand.Parameters.AddWithValue("@username", user.Username);
+            findUserKeysCommand.Parameters.AddWithValue("@userId", user.Id);
 
             await findUserKeysCommand.PrepareAsync();
             await using var findUserKeysReader = await findUserKeysCommand.ExecuteReaderAsync();
@@ -270,9 +338,17 @@ namespace MonsterTCG.Repository
                     }
                 }
 
+                if (!user.Deck.Equals(oldUser.Deck))
+                {
+                    if (await UpdateUserDeck(user.Deck, user.Id) is null)
+                    {
+                        return null;
+                    }
+                }
+
                 if (!user.Collection.Equals(oldUser.Collection))
                 {
-                    if (await UpdateUserCollection(user.Collection, userId) == null)
+                    if (await UpdateUserCollection(user.Collection, userId) is null)
                     {
                         return null;
                     }
@@ -329,14 +405,26 @@ namespace MonsterTCG.Repository
             return userStats;
         }
 
+        private async Task<(Card? card1, Card? card2, Card? card3, Card? card4)?> UpdateUserDeck(
+            (Card? card1, Card? card2, Card? card3, Card? card4) deck, string userId)
+        {
+            await using var connection = await DataSource.OpenConnectionAsync();
+            await using var updateDeckCommand = new NpgsqlCommand(
+                "UPDATE deck\n" +
+                $"SET {string.Join(" AND ", Enumerable.Range(0, 4).Select(i => $"card_id_{i + 1} = @cardId{i + 1}"))}\n" +
+                "WHERE deck_id = @deckId",
+                connection);
+            
+            updateDeckCommand.Parameters.AddWithValue("@deckId", )
+            
+            
+            
+            return null;
+        }
+
         private async Task<List<Card>?> UpdateUserCollection(List<Card> collection, string userId)
         {
             var oldCollection = await FindUserCards(userId);
-
-            if (oldCollection == null)
-            {
-                return null;
-            }
 
             var addedCards = collection.Except(oldCollection).ToList();
             var removedCards = oldCollection.Except(collection).ToList();
@@ -361,7 +449,7 @@ namespace MonsterTCG.Repository
             addAddedUserCardsCommand.Parameters.AddWithValue("@userId", userId);
             addAddedUserCardsCommand.Parameters.AddRange(addedCards
                 .Select((card, i) => new NpgsqlParameter($"@cardId{i + 1}", card.Id)).ToArray());
-            
+
 
             await deleteRemovedUserCardsCommand.PrepareAsync();
             await addAddedUserCardsCommand.PrepareAsync();

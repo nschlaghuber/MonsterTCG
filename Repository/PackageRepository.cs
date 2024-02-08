@@ -82,30 +82,35 @@ namespace MonsterTCG.Repository
                 : null;
         }
 
-        public async Task<Package?> FindRandomPackage()
+        public async Task<Package?> FindFirstPackage()
         {
             await using var connection = await DataSource.OpenConnectionAsync();
-            await using var findAllPackageIdsCommand = new NpgsqlCommand($"SELECT package_id FROM package", connection);
+            await using var findFirstPackageCommand = new NpgsqlCommand($"SELECT * FROM package LIMIT 1", connection);
 
-            await using var findAllPackageIdsReader = await findAllPackageIdsCommand.ExecuteReaderAsync();
+            await using var findFirstPackageReader = await findFirstPackageCommand.ExecuteReaderAsync();
 
-            if (!findAllPackageIdsReader.HasRows)
+            if (await findFirstPackageReader.ReadAsync())
             {
-                return null;
+                var cards = (await _cardRepository.FindCardsByIds(new List<string>
+                {
+                    findFirstPackageReader.GetString(1),
+                    findFirstPackageReader.GetString(2),
+                    findFirstPackageReader.GetString(3),
+                    findFirstPackageReader.GetString(4),
+                    findFirstPackageReader.GetString(5),
+                }))!.ToList();
+
+                return new Package(
+                findFirstPackageReader.GetString(0),
+                cards[0],
+                cards[1],
+                cards[2],
+                cards[3],
+                cards[4]
+                );
             }
 
-            var allPackageIds = new List<string>();
-
-            while (await findAllPackageIdsReader.ReadAsync())
-            {
-                allPackageIds.Add(findAllPackageIdsReader.GetString(0));
-            }
-
-            var rnd = new Random();
-
-            var randomPackageId = allPackageIds[rnd.Next(0, allPackageIds.Count)];
-
-            return await FindPackageById(randomPackageId);
+            return null;
         }
 
         public async Task<bool> ExistsByCardIds((string?, string?, string?, string?, string?) cardIds)

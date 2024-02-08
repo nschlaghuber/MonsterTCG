@@ -1,4 +1,7 @@
-﻿namespace MonsterTCG.Model
+﻿using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+
+namespace MonsterTCG.Model
 {
     public enum ElementType
     {
@@ -16,9 +19,15 @@
     public class Card : IEquatable<Card>
     {
         public string Id { get; }
+        
         public string Name { get; }
+        
         public int Damage { get; }
+        
+        [JsonConverter(typeof(StringEnumConverter))]
         public ElementType ElementType { get; }
+        
+        [JsonConverter(typeof(StringEnumConverter))]
         public CardType CardType { get; }
 
         public Card(string id, string name, int damage, ElementType elementType, CardType cardType)

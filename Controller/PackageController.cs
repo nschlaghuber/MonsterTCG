@@ -72,7 +72,7 @@ namespace MonsterTCG.Controller
                 return;
             }
 
-            var package = await _packageRepository.FindRandomPackage();
+            var package = await _packageRepository.FindFirstPackage();
 
             if (package == null)
             {

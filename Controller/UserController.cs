@@ -63,7 +63,7 @@ namespace MonsterTCG.Controller
                 return;
             }
 
-            if((await _userRepository.CreateUser(new User(username, password))) == null)
+            if(await _userRepository.CreateUser(new User(username, password)) is null)
             {
                 httpRequestEventArgs.Reply(HttpStatusCode.InternalServerError, "An unknown error has occured");
                 return;

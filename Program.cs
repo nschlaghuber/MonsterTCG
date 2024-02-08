@@ -5,7 +5,7 @@ using MonsterTCG.Repository;
 using Npgsql;
 
 
-const bool rebuildTables = false;
+const bool rebuildTables = true;
 
 
 var httpServer = new HttpServer();
@@ -22,11 +22,9 @@ if (rebuildTables)
 }
 await tableBuilder.EnsureTablesExists();
 
-var repositories = new List<Repository>
-{
-    new UserRepository(dataSource),
-    new CardRepository(dataSource)
-};
+var repositories = new List<Repository>();
+repositories.Add(new CardRepository(dataSource));
+repositories.Add(new UserRepository(dataSource, repositories.OfType<CardRepository>().First()));
 repositories.Add(new PackageRepository(dataSource, repositories.OfType<CardRepository>().First()));
 
 var controllers = new List<Controller>
@@ -34,7 +32,9 @@ var controllers = new List<Controller>
     new UserController(repositories.OfType<UserRepository>().First()),
     new PackageController(repositories.OfType<PackageRepository>().First(),
         repositories.OfType<CardRepository>().First(),
-        repositories.OfType<UserRepository>().First())
+        repositories.OfType<UserRepository>().First()),
+    new CardController(repositories.OfType<CardRepository>().First(),
+        repositories.OfType<UserRepository>().First()),
 };
 
 httpServer.IncomingRequest += ProcessRequest;
