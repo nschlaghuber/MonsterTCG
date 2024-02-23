@@ -1,15 +1,9 @@
-﻿using MonsterTCG.Controller.Interface;
-using MonsterTCG.Model.Http;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using MonsterTCG.Model.Http;
 
 namespace MonsterTCG.Controller
 {
-    public abstract class Controller : IHttpController
+    public abstract class Controller
     {
-        public abstract bool ProcessRequest(HttpRequestEventArgs e);
+        public abstract Task<bool> ProcessRequest(HttpRequestEventArgs e);
     }
 }

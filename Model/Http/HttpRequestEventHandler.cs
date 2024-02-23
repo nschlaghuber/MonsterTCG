@@ -6,5 +6,5 @@ using System.Threading.Tasks;
 
 namespace MonsterTCG.Model.Http
 {
-    public delegate void HttpRequestEventHandler(object sender, HttpRequestEventArgs e);
+    public delegate Task HttpRequestEventHandler(object sender, HttpRequestEventArgs e);
 }

@@ -1,7 +1,7 @@
-﻿using System.ComponentModel.DataAnnotations;
-using System.Net;
+﻿using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using MonsterTCG.Model.Deck;
 
 namespace MonsterTCG.Model.Http
 {
@@ -15,14 +15,7 @@ namespace MonsterTCG.Model.Http
         }
         public virtual HttpRequest Request { get; }
 
-        public virtual string? GetBearerToken()
-        {
-            var authHeader = Request.GetAuthorizationHeader();
-
-            return authHeader is { Item1: "Bearer" } ? authHeader.Value.Item2 : null;
-        }
-
-        public virtual void Reply(HttpStatusCode status, string? payload)
+        public virtual void Reply(HttpStatusCode status, string? payload, FormatType formatType = FormatType.Json)
         {
             var responseBuilder = new StringBuilder();
 
@@ -50,16 +43,24 @@ namespace MonsterTCG.Model.Http
                     responseBuilder.AppendLine("HTTP/1.1 418 I'm a Teapot"); break;
             }
 
-            responseBuilder.AppendLine("Content-Type: text/plain");
+            responseBuilder.Append($"Content-Type: ");
+            switch (formatType)
+            {
+                case FormatType.Json:
+                    responseBuilder.AppendLine("application/json");
+                    break;
+                case FormatType.Plain:
+                    responseBuilder.AppendLine("text/plain");
+                    break;
+            }
 
-            responseBuilder.AppendLine($"Content-Length: {(payload != null ? Encoding.ASCII.GetByteCount(payload) : "0")}");
+            responseBuilder.AppendLine($"Content-Length: {(payload is not null ? Encoding.ASCII.GetByteCount(payload) : "0\r\n")}");
 
             if (!string.IsNullOrEmpty(payload)) 
             {
                 responseBuilder.AppendLine();
                 responseBuilder.Append(payload); 
             }
-            var test = responseBuilder.ToString();
             var buffer = Encoding.ASCII.GetBytes(responseBuilder.ToString());
             Client.Send(buffer);
             Client.Close();

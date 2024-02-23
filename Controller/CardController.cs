@@ -1,5 +1,8 @@
 ﻿using System.Net;
+using System.Text;
 using MonsterTCG.Model;
+using MonsterTCG.Model.Card;
+using MonsterTCG.Model.Deck;
 using MonsterTCG.Model.Http;
 using MonsterTCG.Repository;
 using MonsterTCG.Util;
@@ -10,26 +13,41 @@ namespace MonsterTCG.Controller;
 
 public class CardController : Controller
 {
-    private UserRepository _userRepository;
-    private CardRepository _cardRepository;
+    private readonly IUserRepository _userRepository;
+    private readonly ICardRepository _cardRepository;
     
-    public CardController(CardRepository cardRepository, UserRepository userRepository)
+    public CardController(ICardRepository cardRepository, IUserRepository userRepository)
     {
         _userRepository = userRepository;
         _cardRepository = cardRepository;
     }
-    public override bool ProcessRequest(HttpRequestEventArgs e)
+    public override async Task<bool> ProcessRequest(HttpRequestEventArgs e)
     {
         try
         {
-            var test = e.Request.Path.TrimStart('/').Split('/');
-            switch (test)
+            var parts = e.Request.Path.Split('?');
+            var pathParts = parts[0].TrimStart('/').Split('/');
+            var parameters = parts.Length > 1 ? parts[1] : "";
+            switch (pathParts)
             {
                 case ["cards"] when e.Request.Method == HttpMethod.GET:
                     GetCards(e);
                     return true;
                 case ["deck"] when e.Request.Method == HttpMethod.GET:
-                    GetDeck(e);
+                    var formatType = FormatType.Json;
+                    var paramParts = !string.IsNullOrEmpty(parameters) ? parameters.Split('=') : Array.Empty<string>();
+                    if (paramParts is ["format", var format, ..])
+                    {
+                        try
+                        {
+                            formatType = Enum.Parse<FormatType>(format, true);
+                        }
+                        catch (Exception)
+                        {
+                            e.Reply(HttpStatusCode.BadRequest, "Invalid Parameters");
+                        }
+                    }
+                    GetDeck(e, formatType);
                     return true;
                 case ["deck"] when e.Request.Method == HttpMethod.PUT:
                     ConfigureDeck(e);
@@ -45,19 +63,19 @@ public class CardController : Controller
         }
     }
 
-    public async void GetCards(HttpRequestEventArgs httpRequestEventArgs)
+    public async void GetCards(HttpRequest request)
     {
         var token = httpRequestEventArgs.GetBearerToken();
 
-        if (token == null)
+        if (token is null)
         {
             httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
             return;
         }
 
-        var authenticatedUser = await _userRepository.FindUserByUsername(TokenUtil.GetUsernameFromToken(token));
+        var authenticatedUser = await _userRepository.FindByUsernameAsync(TokenUtil.GetUsernameFromToken(token));
 
-        if (authenticatedUser == null)
+        if (authenticatedUser is null)
         {
             httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
             return;
@@ -72,7 +90,7 @@ public class CardController : Controller
         httpRequestEventArgs.Reply(HttpStatusCode.OK, JsonConvert.SerializeObject(authenticatedUser.Collection, Formatting.Indented));
     }
 
-    public async void GetDeck(HttpRequestEventArgs httpRequestEventArgs)
+    public async void GetDeck(HttpRequest request, FormatType formatType)
     {
         var token = httpRequestEventArgs.GetBearerToken();
 
@@ -82,7 +100,7 @@ public class CardController : Controller
             return;
         }
 
-        var authenticatedUser = await _userRepository.FindUserByUsername(TokenUtil.GetUsernameFromToken(token));
+        var authenticatedUser = await _userRepository.FindByUsernameAsync(TokenUtil.GetUsernameFromToken(token));
 
         if (authenticatedUser is null)
         {
@@ -95,11 +113,23 @@ public class CardController : Controller
             httpRequestEventArgs.Reply(HttpStatusCode.NoContent, "Deck is empty");
             return;
         }
+
+        var responseMessage = "";
+
+        switch (formatType)
+        {
+            case FormatType.Json:
+                responseMessage = JsonConvert.SerializeObject(authenticatedUser.DeckCardsAsList, Formatting.Indented);
+                break;
+            case FormatType.Plain:
+                responseMessage = string.Join(", ", authenticatedUser.DeckCardsAsList.Select(card => card!.Name));
+                break;
+        }
         
-        httpRequestEventArgs.Reply(HttpStatusCode.OK, JsonConvert.SerializeObject(authenticatedUser.DeckCardsAsList, Formatting.Indented));
+        httpRequestEventArgs.Reply(HttpStatusCode.OK, responseMessage, formatType);
     }
 
-    public async void ConfigureDeck(HttpRequestEventArgs httpRequestEventArgs)
+    public async void ConfigureDeck(HttpRequest request)
     {
         var token = httpRequestEventArgs.GetBearerToken();
 
@@ -109,7 +139,7 @@ public class CardController : Controller
             return;
         }
 
-        var authenticatedUser = await _userRepository.FindUserByUsername(TokenUtil.GetUsernameFromToken(token));
+        var authenticatedUser = await _userRepository.FindByUsernameAsync(TokenUtil.GetUsernameFromToken(token));
 
         if (authenticatedUser is null)
         {
@@ -125,22 +155,18 @@ public class CardController : Controller
             return;
         }
 
-        if (!await _userRepository.HasCardsFromIds(authenticatedUser, cardIds))
+        if (!await _userRepository.HasCardsFromIdsAsync(authenticatedUser, cardIds))
         {
             httpRequestEventArgs.Reply(HttpStatusCode.Forbidden, "At least one of the provided cards does not belong to the user or is not available.");
             return;
         }
         
-        var newDeckList = (await _cardRepository.FindCardsByIds(cardIds))?.ToList();
+        var newDeckList = (await _cardRepository.FindCardsByIdsAsync(cardIds))?.ToList();
 
-        authenticatedUser.Deck = (newDeckList?[0], newDeckList?[1], newDeckList?[2], newDeckList?[3])!;
+        authenticatedUser.Deck.Cards = (newDeckList?[0], newDeckList?[1], newDeckList?[2], newDeckList?[3])!;
 
-        if (await _userRepository.UpdateUser(authenticatedUser) is null)
-        {
-            httpRequestEventArgs.Reply(HttpStatusCode.InternalServerError, "Something went wrong");
-            return;
-        }
+        await _userRepository.UpdateUserAsync(authenticatedUser);
         
-        httpRequestEventArgs.Reply(HttpStatusCode.OK, "\t\nThe deck has been successfully configured");
+        httpRequestEventArgs.Reply(HttpStatusCode.OK, "The deck has been successfully configured");
     }
 }

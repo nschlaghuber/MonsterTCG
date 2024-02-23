@@ -7,20 +7,20 @@ public class TableBuilder
 {
     NpgsqlDataSource DataSource { get; }
 
-    readonly List<SqlTableDefinition> _tables = new List<SqlTableDefinition>()
+    readonly List<SqlTableDefinition> _tables = new List<SqlTableDefinition>
     {
-        new SqlTableDefinition(
+        new(
             "user_data",
-            new List<SqlColumnDefinition>()
+            new List<SqlColumnDefinition>
             {
                 new("user_data_id", SqlDataType.Varchar50, isPrimaryKey: true),
                 new("name", SqlDataType.Varchar50),
                 new("bio", SqlDataType.Varchar200),
                 new("image", SqlDataType.Varchar50)
             }),
-        new SqlTableDefinition(
+        new(
             "user_stats",
-            new List<SqlColumnDefinition>()
+            new List<SqlColumnDefinition>
             {
                 new("user_stats_id", SqlDataType.Varchar50, isPrimaryKey: true),
                 new("elo_score", SqlDataType.Integer, isNullable: false),
@@ -28,21 +28,20 @@ public class TableBuilder
                 new("losses", SqlDataType.Integer, isNullable: false),
             }
         ),
-        new SqlTableDefinition(
+        new(
             "deck",
-            new List<SqlColumnDefinition>()
+            new List<SqlColumnDefinition>
             {
                 new("deck_id", SqlDataType.Varchar50, isPrimaryKey: true),
                 new("card_id_1", SqlDataType.Varchar50),
                 new("card_id_2", SqlDataType.Varchar50),
                 new("card_id_3", SqlDataType.Varchar50),
                 new("card_id_4", SqlDataType.Varchar50),
-                new("card_id_5", SqlDataType.Varchar50),
             }
         ),
-        new SqlTableDefinition(
+        new(
             "user",
-            new List<SqlColumnDefinition>()
+            new List<SqlColumnDefinition>
             {
                 new("user_id", SqlDataType.Varchar50, isPrimaryKey: true),
                 new("username", SqlDataType.Varchar20, isNullable: false, isUnique: true),
@@ -52,12 +51,12 @@ public class TableBuilder
                 new("deck_id", SqlDataType.Varchar50, foreignKey: new SqlForeignKey("deck", "deck_id")),
                 new("coins", SqlDataType.Integer, isNullable: false),
                 new("user_stats_id", SqlDataType.Varchar50,
-                    foreignKey: new SqlForeignKey("user_stats", "user_stats_id"))
+                    foreignKey: new SqlForeignKey("user_stats", "user_stats_id")),
             }
         ),
-        new SqlTableDefinition(
+        new(
             "card",
-            new List<SqlColumnDefinition>()
+            new List<SqlColumnDefinition>
             {
                 new("card_id", SqlDataType.Varchar50, isPrimaryKey: true),
                 new("name", SqlDataType.Varchar20, isNullable: false),
@@ -66,9 +65,9 @@ public class TableBuilder
                 new("card_type", SqlDataType.Varchar20, isNullable: false),
             }
         ),
-        new SqlTableDefinition(
+        new(
             "package",
-            new List<SqlColumnDefinition>()
+            new List<SqlColumnDefinition>
             {
                 new("package_id", SqlDataType.Varchar50, isPrimaryKey: true),
                 new("card_id_1", SqlDataType.Varchar50, foreignKey: new SqlForeignKey("card", "card_id")),
@@ -78,9 +77,9 @@ public class TableBuilder
                 new("card_id_5", SqlDataType.Varchar50, foreignKey: new SqlForeignKey("card", "card_id")),
             }
         ),
-        new SqlTableDefinition(
+        new(
             "user_card",
-            new List<SqlColumnDefinition>()
+            new List<SqlColumnDefinition>
             {
                 new("user_id", SqlDataType.Varchar50, foreignKey: new SqlForeignKey("user", "user_id")),
                 new("card_id", SqlDataType.Varchar50, foreignKey: new SqlForeignKey("card", "card_id"))
@@ -90,7 +89,18 @@ public class TableBuilder
                 "PRIMARY KEY (user_id, card_id)"
             }
         ),
-    }; 
+        new(
+            "trade",
+            new List<SqlColumnDefinition>
+            {
+                new("trade_id", SqlDataType.Varchar50, isPrimaryKey: true),
+                new("creator_user_id", SqlDataType.Varchar50, foreignKey: new SqlForeignKey("user", "user_id")),
+                new("card_to_trade_id", SqlDataType.Varchar50, foreignKey: new SqlForeignKey("card", "card_id")),
+                new("type", SqlDataType.Varchar20, isNullable: false),
+                new("minimum_damage", SqlDataType.Integer, isNullable: false),
+            }
+        ),
+    };
 
     public TableBuilder(NpgsqlDataSource dataSource)
     {

@@ -1,14 +1,14 @@
 ﻿using MonsterTCG.Util;
 
-namespace MonsterTCG.Model
+namespace MonsterTCG.Model.Package
 {
     public class Package : IEquatable<Package>
     {
         public string PackageId { get; }
-        public (Card Card1, Card Card2, Card Card3, Card Card4, Card Card5) Cards { get; }
-        public List<Card> CardList => TupleUtil.GetListFromTuple<Card>(Cards);
+        public (Card.Card Card1, Card.Card Card2, Card.Card Card3, Card.Card Card4, Card.Card Card5) Cards { get; }
+        public List<Card.Card> CardList => TupleUtil.GetListFromTuple<Card.Card>(Cards);
 
-        public Package(string packageId, Card firstCard, Card secondCard, Card thirdCard, Card fourthCard, Card fifthCard)
+        public Package(string packageId, Card.Card firstCard, Card.Card secondCard, Card.Card thirdCard, Card.Card fourthCard, Card.Card fifthCard)
         {
             PackageId = packageId;
             Cards = (firstCard, secondCard, thirdCard, fourthCard, fifthCard);

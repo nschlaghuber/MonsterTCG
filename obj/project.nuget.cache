@@ -1,16 +1,12 @@
 {
   "version": 2,
-  "dgSpecHash": "7oU60vNrGkm4oRK+QFXmeZ+teLANdgTVF03A25Qq9NGkO+mx8j7BqlrLt82VR41VnzwKyVO1GD67TGgbeFqzbA==",
+  "dgSpecHash": "OQ/7c4IaRhon87tOEyDE9la2EpcpOk9BWjo9Ap0WwWyai1Zb1wfdxVUc064HlYQhYQOUVdv3mp6TJiwQbBqG9g==",
   "success": true,
-  "projectFilePath": "C:\\Users\\niklas.schlaghuber\\Git\\MonsterTcg\\MonsterTCG.csproj",
+  "projectFilePath": "C:\\Users\\nschl\\Uni\\Git\\MonsterTCG\\MonsterTCG.csproj",
   "expectedPackageFiles": [
-    "C:\\Users\\niklas.schlaghuber\\.nuget\\packages\\microsoft.extensions.logging.abstractions\\6.0.0\\microsoft.extensions.logging.abstractions.6.0.0.nupkg.sha512",
-    "C:\\Users\\niklas.schlaghuber\\.nuget\\packages\\newtonsoft.json\\13.0.3\\newtonsoft.json.13.0.3.nupkg.sha512",
-    "C:\\Users\\niklas.schlaghuber\\.nuget\\packages\\npgsql\\7.0.6\\npgsql.7.0.6.nupkg.sha512",
-    "C:\\Users\\niklas.schlaghuber\\.nuget\\packages\\microsoft.netcore.app.ref\\7.0.14\\microsoft.netcore.app.ref.7.0.14.nupkg.sha512",
-    "C:\\Users\\niklas.schlaghuber\\.nuget\\packages\\microsoft.windowsdesktop.app.ref\\7.0.14\\microsoft.windowsdesktop.app.ref.7.0.14.nupkg.sha512",
-    "C:\\Users\\niklas.schlaghuber\\.nuget\\packages\\microsoft.aspnetcore.app.ref\\7.0.14\\microsoft.aspnetcore.app.ref.7.0.14.nupkg.sha512",
-    "C:\\Users\\niklas.schlaghuber\\.nuget\\packages\\microsoft.netcore.app.host.win-x64\\7.0.14\\microsoft.netcore.app.host.win-x64.7.0.14.nupkg.sha512"
+    "C:\\Users\\nschl\\.nuget\\packages\\microsoft.extensions.logging.abstractions\\6.0.0\\microsoft.extensions.logging.abstractions.6.0.0.nupkg.sha512",
+    "C:\\Users\\nschl\\.nuget\\packages\\newtonsoft.json\\13.0.3\\newtonsoft.json.13.0.3.nupkg.sha512",
+    "C:\\Users\\nschl\\.nuget\\packages\\npgsql\\7.0.6\\npgsql.7.0.6.nupkg.sha512"
   ],
   "logs": []
 }

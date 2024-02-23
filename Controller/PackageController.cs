@@ -1,34 +1,33 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using MonsterTCG.Model;
-using MonsterTCG.Model.Http;
+﻿using MonsterTCG.Model.Http;
 using MonsterTCG.Repository;
 using MonsterTCG.Util;
 using Newtonsoft.Json.Linq;
 using System.Net;
-using System.Net.Cache;
+using MonsterTCG.Model.Card;
+using MonsterTCG.Model.Package;
+using MonsterTCG.Model.User;
+using Newtonsoft.Json;
 using HttpMethod = MonsterTCG.Model.Http.HttpMethod;
 
 namespace MonsterTCG.Controller
 {
     public class PackageController : Controller
     {
-        private readonly PackageRepository _packageRepository;
-        private readonly CardRepository _cardRepository;
-        private readonly UserRepository _userRepository;
+        private readonly IPackageRepository _packageRepository;
+        private readonly IUserRepository _userRepository;
 
-        public PackageController(PackageRepository packageRepository, CardRepository cardRepository, UserRepository userRepository)
+        public PackageController(IPackageRepository packageRepository, IUserRepository userRepository)
         {
             _packageRepository = packageRepository;
-            _cardRepository = cardRepository;
             _userRepository = userRepository;
         }
 
-        public override bool ProcessRequest(HttpRequestEventArgs e)
+        public override Task<bool> ProcessRequest(HttpRequestEventArgs e)
         {
             try
             {
-                var test = e.Request.Path.TrimStart('/').Split('/');
-                switch (test)
+                var pathParts = e.Request.Path.TrimStart('/').Split('/');
+                switch (pathParts)
                 {
                     case ["packages"] when e.Request.Method == HttpMethod.POST:
                         CreatePackage(e);
@@ -47,20 +46,20 @@ namespace MonsterTCG.Controller
             }
         }
 
-        private async void AcquirePackage(HttpRequestEventArgs httpRequestEventArgs)
+        private async void AcquirePackage(HttpRequest request)
         {
-            
             var token = httpRequestEventArgs.GetBearerToken();
 
-            if (token == null)
+            if (token is null)
             {
                 httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
                 return;
             }
 
-            var authenticatedUser = await _userRepository.FindUserByUsername(TokenUtil.GetUsernameFromToken(token));
+            var authenticatedUser =
+                await _userRepository.FindByUsernameAsync(TokenUtil.GetUsernameFromToken(token));
 
-            if (authenticatedUser == null)
+            if (authenticatedUser is null)
             {
                 httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
                 return;
@@ -72,38 +71,34 @@ namespace MonsterTCG.Controller
                 return;
             }
 
-            var package = await _packageRepository.FindFirstPackage();
+            var package = await _packageRepository.FindFirstPackageAsync();
 
-            if (package == null)
+            if (package is null)
             {
                 httpRequestEventArgs.Reply(HttpStatusCode.NotFound, "No card package available for buying");
                 return;
             }
-            
+
             authenticatedUser.Collection.AddRange(package.CardList);
-            
-            authenticatedUser.Coins -= 5;
 
-            if (await _userRepository.UpdateUser(authenticatedUser) == null)
+            authenticatedUser.SetCoins(authenticatedUser.Coins - 5);
+
+            await _userRepository.UpdateUserAsync(authenticatedUser);
+
+            if (!await _packageRepository.DeletePackageByIdAsync(package.PackageId))
             {
                 httpRequestEventArgs.Reply(HttpStatusCode.InternalServerError, "An unknown error has occured");
                 return;
             }
 
-            if (!await _packageRepository.DeletePackageById(package.PackageId))
-            {
-                httpRequestEventArgs.Reply(HttpStatusCode.InternalServerError, "An unknown error has occured");
-                return;
-            }
-            
             httpRequestEventArgs.Reply(HttpStatusCode.OK, "A package has been successfully bought");
         }
 
-        private async void CreatePackage(HttpRequestEventArgs httpRequestEventArgs)
+        private async void CreatePackage(HttpRequest request)
         {
             var token = httpRequestEventArgs.GetBearerToken();
-            
-            if (token == null)
+
+            if (token is null)
             {
                 httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
                 return;
@@ -115,54 +110,65 @@ namespace MonsterTCG.Controller
                 return;
             }
 
-            var payloadObjectArray = JArray.Parse(httpRequestEventArgs.Request.Payload);
+            IEnumerable<CreateCard>? createCards;
 
-            if (payloadObjectArray.Count != 5)
+            var settings = new JsonSerializerSettings
             {
-                httpRequestEventArgs.Reply(HttpStatusCode.BadRequest, "A package needs to contain exactly 5 cards");
+                Error = (_, args) =>
+                {
+                    args.ErrorContext.Handled = true;
+                    createCards = null;
+                },
+                MissingMemberHandling = MissingMemberHandling.Error,
+            };
+
+            createCards =
+                JsonConvert.DeserializeObject<List<CreateCard>>(httpRequestEventArgs.Request.Payload, settings);
+
+            if (createCards is null || !createCards.Any())
+            {
+                httpRequestEventArgs.Reply(HttpStatusCode.BadRequest, "Package invalid or missing");
                 return;
             }
 
-            var cards = new List<Card>();
-
-            foreach (var jToken in payloadObjectArray)
+            if (createCards.Count() != 5)
             {
-                var cardJObject = (JObject)jToken;
-
-                if (!cardJObject.TryGetValue("Id", out var id) ||
-                    !cardJObject.TryGetValue("Name", out var name) ||
-                    !cardJObject.TryGetValue("Damage", out var damage))
-                {
-                    httpRequestEventArgs.Reply(HttpStatusCode.BadRequest, "Card data is missing/invalid");
-                    return;
-                }
-
-                var elementType =
-                    name.ToString().Contains("Fire") ? ElementType.Fire :
-                    name.ToString().Contains("Water") ? ElementType.Water :
-                    ElementType.Normal;
-
-                var cardType =
-                    name.ToString().Contains("Spell") ? CardType.Spell : CardType.Monster;
-
-                cards.Add(new Card(id.ToString(), name.ToString(), (int)damage, elementType, cardType));
+                httpRequestEventArgs.Reply(HttpStatusCode.BadRequest, "Package does not contain 5 cards");
+                return;
             }
 
-            if (await _packageRepository.ExistsByCardIds((cards[0]?.Id, cards[1]?.Id, cards[2]?.Id, cards[3]?.Id,
-                    cards[4]?.Id)))
+            var packageCards = createCards
+                .Select(createCard => Card.Create(
+                        createCard.Id,
+                        createCard.Name,
+                        (int)createCard.Damage
+                    )
+                ).ToList();
+
+            if (await _packageRepository.ExistsByCardIdsAsync(
+                    (
+                        packageCards[0].Id,
+                        packageCards[1].Id,
+                        packageCards[2].Id,
+                        packageCards[3].Id,
+                        packageCards[4].Id
+                    )
+                ))
             {
                 httpRequestEventArgs.Reply(HttpStatusCode.Conflict, "Package with the same cards already created");
             }
 
-            var package = new Package(Guid.NewGuid().ToString(), cards[0], cards[1], cards[2], cards[3], cards[4]);
+            var package = new Package(Guid.NewGuid().ToString(),
+                packageCards[0],
+                packageCards[1],
+                packageCards[2],
+                packageCards[3],
+                packageCards[4]
+            );
 
-            if (await _packageRepository.CreatePackage(package) != null)
-            {
-                httpRequestEventArgs.Reply(HttpStatusCode.Created, "Package and missing cards successfully created");
-                return;
-            }
+            await _packageRepository.CreatePackageAsync(package);
 
-            httpRequestEventArgs.Reply(HttpStatusCode.InternalServerError, "An unknown error has occured");
+            httpRequestEventArgs.Reply(HttpStatusCode.Created, "Package and missing cards successfully created");
         }
     }
 }

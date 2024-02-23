@@ -12,14 +12,18 @@ namespace MonsterTCG.Model.Http
 {
     public enum HttpMethod
     {
-        GET, POST, PUT, DELETE
+        GET,
+        POST,
+        PUT,
+        DELETE
     }
 
     public class HttpRequest
     {
         public string PlainMessage
         {
-            get {
+            get
+            {
                 if (plainMessage == null)
                 {
                     return $"{Method} {Path} HTTP/1.1\r\n" +
@@ -31,17 +35,21 @@ namespace MonsterTCG.Model.Http
                            $"\r\n" +
                            $"{Payload}";
                 }
+
                 return plainMessage;
             }
             set { plainMessage = value.ToString(); }
         }
+
         private string plainMessage;
         public HttpMethod Method { get; set; }
-        public List<HttpHeader> Headers { get; set; } 
+        public List<HttpHeader> Headers { get; set; }
         public string Path { get; set; } = string.Empty;
         public string Payload { get; set; }
 
-        public HttpRequest() { }
+        public HttpRequest()
+        {
+        }
 
         public HttpRequest(string plainMessage)
         {
@@ -66,11 +74,18 @@ namespace MonsterTCG.Model.Http
                     {
                         inheaders = false;
                     }
-                    else { headers.Add(new HttpHeader(lines[i])); }
+                    else
+                    {
+                        headers.Add(new HttpHeader(lines[i]));
+                    }
                 }
                 else
                 {
-                    if (!string.IsNullOrWhiteSpace(Payload)) { Payload += "\r\n"; }
+                    if (!string.IsNullOrWhiteSpace(Payload))
+                    {
+                        Payload += "\r\n";
+                    }
+
                     Payload += lines[i];
                 }
             }
@@ -80,13 +95,21 @@ namespace MonsterTCG.Model.Http
 
         public (string, string)? GetAuthorizationHeader()
         {
-            HttpHeader? authHeader = Headers.First(header => header.Name == "Authorization");
+            var authHeader = Headers.FirstOrDefault(header => header.Name == "Authorization");
             if (authHeader == null)
             {
                 return null;
             }
-            string[] parts = authHeader.Value.Split(' ');
+
+            var parts = authHeader.Value.Split(' ');
             return (parts[0], parts[1]);
+        }
+
+        public virtual string? GetBearerToken()
+        {
+            var authHeader = GetAuthorizationHeader();
+
+            return authHeader is { Item1: "Bearer" } ? authHeader.Value.Item2 : null;
         }
     }
 }

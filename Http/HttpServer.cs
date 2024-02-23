@@ -1,13 +1,13 @@
-﻿using MonsterTCG.Model.Http;
-using System.Net;
+﻿using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using MonsterTCG.Model.Http;
 
-namespace MonsterTCG
+namespace MonsterTCG.Http
 {
     public class HttpServer
     {
-        private Socket? listener;
+        private Socket? _listener;
 
         public event HttpRequestEventHandler? IncomingRequest;
         public bool Active { get; set; } = false;
@@ -18,25 +18,25 @@ namespace MonsterTCG
 
             Active = true;
 
-            listener = new Socket(IPAddress.Loopback.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
-            listener.Bind(new IPEndPoint(IPAddress.Loopback, port));
+            _listener = new Socket(IPAddress.Loopback.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+            _listener.Bind(new IPEndPoint(IPAddress.Loopback, port));
 
-            listener.Listen();
+            _listener.Listen();
 
             Console.WriteLine($"Tcp Server has started listening on {IPAddress.Loopback}:{port}.");
 
-            byte[] buffer = new byte[1024];
+            var buffer = new byte[1024];
 
             while (Active)
             {
-                Socket client = listener.Accept();
+                var client = _listener.Accept();
 
-                string data = string.Empty;
+                var data = string.Empty;
                 do
                 {
-                    int dataLength = client.Receive(buffer);
+                    var dataLength = client.Receive(buffer);
                     data += Encoding.ASCII.GetString(buffer, 0, dataLength);
-                } while (String.IsNullOrEmpty(data));
+                } while (string.IsNullOrEmpty(data));
 
                 IncomingRequest?.Invoke(this, new HttpRequestEventArgs(client, new HttpRequest(data)));
             }

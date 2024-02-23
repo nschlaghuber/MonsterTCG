@@ -1,18 +1,120 @@
 ﻿using System.Data;
 using Npgsql;
-using MonsterTCG.Model;
-using MonsterTCG.Model.SQL;
+using MonsterTCG.Model.Card;
+using MonsterTCG.Model.Deck;
+using MonsterTCG.Model.User;
 using MonsterTCG.Util;
 
 namespace MonsterTCG.Repository
 {
-    public class UserRepository : Repository
+    public class UserRepository : IUserRepository
     {
-        private readonly CardRepository _cardRepository;
+        private readonly NpgsqlDataSource _dataSource;
+        private readonly ICardRepository _cardRepository;
+        private readonly ITradeRepository _tradeRepository;
 
-        public UserRepository(NpgsqlDataSource dataSource, CardRepository cardRepository) : base(dataSource)
+        public UserRepository(NpgsqlDataSource dataSource, ICardRepository cardRepository,
+            ITradeRepository tradeRepository)
         {
+            _dataSource = dataSource;
             _cardRepository = cardRepository;
+            _tradeRepository = tradeRepository;
+        }
+
+        public async Task<IEnumerable<User>> AllAsync()
+        {
+            await using var connection = await _dataSource.OpenConnectionAsync();
+            await using var getAllUsersCommand = new NpgsqlCommand(
+                "SELECT user_id, username, password, name, bio, image, \"user\".deck_id, coins, elo_score, wins, losses\n" +
+                "FROM \"user\"\n" +
+                "INNER JOIN user_data ON \"user\".user_data_id = user_data.user_data_id\n" +
+                "INNER JOIN user_stats ON \"user\".user_stats_id = user_stats.user_stats_id\n" +
+                "INNER JOIN deck ON \"user\".deck_id = deck.deck_id\n",
+                connection);
+
+            await using var getAllUsersReader = await getAllUsersCommand.ExecuteReaderAsync();
+
+            var allUsers = new List<User>();
+
+            while (await getAllUsersReader.ReadAsync())
+            {
+                var userCards = (await FindUserCardsAsync(getAllUsersReader.GetString(0))).ToList();
+
+                var userDeck = await FindDeckFromIdAsync(getAllUsersReader.GetString(6));
+
+                var userId = getAllUsersReader.GetString("user_id");
+
+                var userTrades = (await _tradeRepository.FindTradesByCreatorUserIdAsync(userId)).ToList();
+
+                allUsers.Add(User.Create(
+                    userId,
+                    getAllUsersReader.GetString(1),
+                    getAllUsersReader.GetString(2),
+                    new UserData(
+                        getAllUsersReader.GetString(3),
+                        getAllUsersReader.GetString(4),
+                        getAllUsersReader.GetString(5)),
+                    userCards,
+                    userDeck!,
+                    getAllUsersReader.GetInt32(7),
+                    new UserStats(
+                        getAllUsersReader.GetInt32(8),
+                        getAllUsersReader.GetInt32(9),
+                        getAllUsersReader.GetInt32(10)),
+                    userTrades
+                ));
+            }
+
+            return allUsers;
+        }
+
+        public async Task<User?> FindByIdAsync(string id)
+        {
+            await using var connection = await _dataSource.OpenConnectionAsync();
+            await using var findUserCommand = new NpgsqlCommand(
+                "SELECT user_id, username, password, name, bio, image, \"user\".deck_id, coins, elo_score, wins, losses\n" +
+                "FROM \"user\"\n" +
+                "INNER JOIN user_data ON \"user\".user_data_id = user_data.user_data_id\n" +
+                "INNER JOIN user_stats ON \"user\".user_stats_id = user_stats.user_stats_id\n" +
+                "INNER JOIN deck ON \"user\".deck_id = deck.deck_id\n" +
+                "WHERE user_id = @userId",
+                connection);
+
+            findUserCommand.Parameters.AddWithValue("@userId", id);
+
+            await findUserCommand.PrepareAsync();
+            await using var findUserReader = await findUserCommand.ExecuteReaderAsync();
+
+            if (!await findUserReader.ReadAsync())
+            {
+                return null;
+            }
+
+            var userCards = await FindUserCardsAsync(findUserReader.GetString(0));
+
+            var userDeck = await FindDeckFromIdAsync(findUserReader.GetString(6));
+
+            var userId = findUserReader.GetString("user_id");
+
+            var userTrades = (await _tradeRepository.FindTradesByCreatorUserIdAsync(userId)).ToList();
+
+            return User.Create(
+                findUserReader.GetString(0),
+                findUserReader.GetString(1),
+                findUserReader.GetString(2),
+                new UserData(
+                    findUserReader.GetString(3),
+                    findUserReader.GetString(4),
+                    findUserReader.GetString(5)),
+                userCards.ToList(),
+                userDeck!,
+                findUserReader.GetInt32(7),
+                new UserStats(
+                    findUserReader.GetInt32(8),
+                    findUserReader.GetInt32(9),
+                    findUserReader.GetInt32(10)),
+                userTrades
+            );
         }
 
         /// <summary>
@@ -20,60 +122,58 @@ namespace MonsterTCG.Repository
         /// </summary>
         /// <param name="username">The username of the user</param>
         /// <returns>The user with the given username. If no such user has been found, returns null</returns>
-        public async Task<User?> FindUserByUsername(string username)
+        public async Task<User?> FindByUsernameAsync(string username)
         {
-            try
-            {
-                await using var connection = await DataSource.OpenConnectionAsync();
-                await using var findUserCommand = new NpgsqlCommand(
-                    "SELECT user_id, username, password, name, bio, image, deck_id, coins, elo_score, wins, losses\n" +
-                    "FROM \"user\"\n" +
-                    "INNER JOIN user_data ON \"user\".user_data_id = user_data.user_data_id\n" +
-                    "INNER JOIN user_stats ON \"user\".user_stats_id = user_stats.user_stats_id\n" +
-                    "INNER JOIN deck ON \"user\".deck_id" +
-                    "WHERE username = @username",
-                    connection);
+            await using var connection = await _dataSource.OpenConnectionAsync();
+            await using var findUserCommand = new NpgsqlCommand(
+                "SELECT user_id, username, password, name, bio, image, \"user\".deck_id, coins, elo_score, wins, losses\n" +
+                "FROM \"user\"\n" +
+                "INNER JOIN user_data ON \"user\".user_data_id = user_data.user_data_id\n" +
+                "INNER JOIN user_stats ON \"user\".user_stats_id = user_stats.user_stats_id\n" +
+                "INNER JOIN deck ON \"user\".deck_id = deck.deck_id\n" +
+                "WHERE username = @username",
+                connection);
 
-                findUserCommand.Parameters.AddWithValue("@username", username);
+            findUserCommand.Parameters.AddWithValue("@username", username);
 
-                await findUserCommand.PrepareAsync();
-                await using var findUserReader = await findUserCommand.ExecuteReaderAsync();
+            await findUserCommand.PrepareAsync();
+            await using var findUserReader = await findUserCommand.ExecuteReaderAsync();
 
-                if (!await findUserReader.ReadAsync())
-                {
-                    return null;
-                }
-
-                var userCards = await FindUserCards(findUserReader.GetString(0));
-
-                var userDeck = await FindDeckFromId(findUserReader.GetString(7));
-
-                return new User(
-                    findUserReader.GetString(0),
-                    findUserReader.GetString(1),
-                    findUserReader.GetString(2),
-                    new UserData(
-                        findUserReader.GetString(3),
-                        findUserReader.GetString(4),
-                        findUserReader.GetString(5)),
-                    userCards,
-                    userDeck,
-                    findUserReader.GetInt32(6),
-                    new UserStats(
-                        findUserReader.GetInt32(8),
-                        findUserReader.GetInt32(9),
-                        findUserReader.GetInt32(10))
-                );
-            }
-            catch (Exception e)
+            if (!await findUserReader.ReadAsync())
             {
                 return null;
             }
+
+            var userCards = await FindUserCardsAsync(findUserReader.GetString(0));
+
+            var userDeck = await FindDeckFromIdAsync(findUserReader.GetString(6));
+
+            var userId = findUserReader.GetString("user_id");
+
+            var userTrades = (await _tradeRepository.FindTradesByCreatorUserIdAsync(userId)).ToList();
+
+            return User.Create(
+                findUserReader.GetString(0),
+                findUserReader.GetString(1),
+                findUserReader.GetString(2),
+                new UserData(
+                    findUserReader.GetString(3),
+                    findUserReader.GetString(4),
+                    findUserReader.GetString(5)),
+                userCards.ToList(),
+                userDeck!,
+                findUserReader.GetInt32(7),
+                new UserStats(
+                    findUserReader.GetInt32(8),
+                    findUserReader.GetInt32(9),
+                    findUserReader.GetInt32(10)),
+                userTrades
+            );
         }
 
-        private async Task<List<Card>> FindUserCards(string userId)
+        private async Task<IEnumerable<Card>> FindUserCardsAsync(string userId)
         {
-            await using var connection = await DataSource.OpenConnectionAsync();
+            await using var connection = await _dataSource.OpenConnectionAsync();
             await using var findUserCardsCommand = new NpgsqlCommand(
                 "SELECT card.card_id, name, damage, element_type, card_type FROM user_card\n" +
                 "INNER JOIN card ON card.card_id = user_card.card_id\n" +
@@ -89,7 +189,7 @@ namespace MonsterTCG.Repository
 
             while (await findUserCardsReader.ReadAsync())
             {
-                userCards.Add(new Card(
+                userCards.Add(Card.Create(
                     findUserCardsReader.GetString(0),
                     findUserCardsReader.GetString(1),
                     findUserCardsReader.GetInt32(2),
@@ -101,9 +201,9 @@ namespace MonsterTCG.Repository
             return userCards;
         }
 
-        private async Task<(Card? card1, Card? card2, Card? card3, Card? card4)> FindDeckFromId(string deckId)
+        public async Task<Deck?> FindDeckFromIdAsync(string deckId)
         {
-            await using var connection = await DataSource.OpenConnectionAsync();
+            await using var connection = await _dataSource.OpenConnectionAsync();
             await using var findDeckCommand = new NpgsqlCommand(
                 "SELECT * FROM deck\n" +
                 "WHERE deck_id = @deckId",
@@ -116,7 +216,7 @@ namespace MonsterTCG.Repository
 
             if (!await findDeckReader.ReadAsync())
             {
-                return (null, null, null, null);
+                return null;
             }
 
             var deckCardIds = new List<string>
@@ -125,21 +225,44 @@ namespace MonsterTCG.Repository
                 findDeckReader.GetString(2),
                 findDeckReader.GetString(3),
                 findDeckReader.GetString(4),
-                findDeckReader.GetString(5),
             };
 
             await findDeckReader.DisposeAsync();
 
-            var deckCards = (await _cardRepository.FindCardsByIds(deckCardIds))?.ToList();
+            var deckCards = (await _cardRepository.FindCardsByIdsAsync(deckCardIds))?.ToList();
 
-            return deckCards is null ? 
-                (null, null, null, null) : 
-                (deckCards[0], deckCards[1], deckCards[2], deckCards[3]);
+            return deckCards is null ? null :
+                deckCards.Count > 0 ? new Deck(deckId, (deckCards[0], deckCards[1], deckCards[2], deckCards[3])) :
+                new Deck(deckId);
         }
 
-        public async Task<bool> ExistsByUsername(string username)
+        private async Task<UserCredentials?> FindUserCredentialsAsync(string username)
         {
-            await using var connection = await DataSource.OpenConnectionAsync();
+            await using var connection = await _dataSource.OpenConnectionAsync();
+            await using var findUserCredentialsCommand = new NpgsqlCommand(
+                "SELECT username, password FROM \"user\"\n" +
+                "WHERE username = @username",
+                connection);
+
+            findUserCredentialsCommand.Parameters.AddWithValue("@username", username);
+
+            await findUserCredentialsCommand.PrepareAsync();
+            await using var findUserCredentialsReader = await findUserCredentialsCommand.ExecuteReaderAsync();
+
+            if (!await findUserCredentialsReader.ReadAsync())
+            {
+                return null;
+            }
+
+            return new UserCredentials(
+                findUserCredentialsReader.GetString("username"),
+                findUserCredentialsReader.GetString("password")
+            );
+        }
+
+        public async Task<bool> ExistsByUsernameAsync(string username)
+        {
+            await using var connection = await _dataSource.OpenConnectionAsync();
             await using var findUserExistsCommand = new NpgsqlCommand(
                 "SELECT EXISTS(SELECT 1 FROM \"user\" WHERE username = @username)",
                 connection);
@@ -154,9 +277,26 @@ namespace MonsterTCG.Repository
             return findUserExistsReader.GetBoolean(0);
         }
 
-        public async Task<bool> HasCardsFromIds(User user, List<string> cardIds)
+        public async Task<bool> HasCardFromIdAsync(User user, string cardId)
         {
-            await using var connection = await DataSource.OpenConnectionAsync();
+            await using var connection = await _dataSource.OpenConnectionAsync();
+            await using var findUserCardsCommand = new NpgsqlCommand(
+                "SELECT card_id FROM user_card\n" +
+                "WHERE user_id = @userId AND card_id = @cardId",
+                connection);
+
+            findUserCardsCommand.Parameters.AddWithValue("@userId", user.Id);
+            findUserCardsCommand.Parameters.AddWithValue("@cardId", cardId);
+
+            await findUserCardsCommand.PrepareAsync();
+            await using var findUserCardsReader = await findUserCardsCommand.ExecuteReaderAsync();
+
+            return await findUserCardsReader.ReadAsync();
+        }
+
+        public async Task<bool> HasCardsFromIdsAsync(User user, List<string> cardIds)
+        {
+            await using var connection = await _dataSource.OpenConnectionAsync();
             await using var findUserCardsCommand = new NpgsqlCommand(
                 "SELECT card_id FROM user_card\n" +
                 "WHERE user_id = @userId AND card_id = ANY(@cardIds)",
@@ -178,45 +318,48 @@ namespace MonsterTCG.Repository
             return rowCount == cardIds.Count;
         }
 
-        public async Task<User?> CreateUser(User user)
+        public async Task<bool> AuthorizeUserAsync(string username, string password)
         {
+            var credentials = await FindUserCredentialsAsync(username);
+
+            return credentials is not null && credentials.Password == PasswordUtil.HashPassword(password);
+        }
+
+        public async Task CreateUserAsync(User user)
+        {
+            await using var connection = await _dataSource.OpenConnectionAsync();
+            await using var createUserTransaction = await connection.BeginTransactionAsync();
+
             try
             {
-                var dataId = await CreateUserData(user.UserData);
-                var statsId = await CreateUserStats(user.UserStats);
+                var dataId = await CreateUserDataAsync(user.UserData, connection);
+                var statsId = await CreateUserStatsAsync(user.UserStats, connection);
 
-                return await CreateUser(user, dataId, statsId);
+                await CreateDeckAsync(user.Deck, connection);
+
+                await CreateUserAsync(user, dataId, statsId, connection);
+
+                await createUserTransaction.CommitAsync();
             }
             catch (Exception)
             {
-                return null;
+                await createUserTransaction.RollbackAsync();
             }
         }
 
-        public async Task<bool> AuthorizeUser(string username, string password)
+        private async Task<User?> CreateUserAsync(User user, string userDataId, string userStatsId,
+            NpgsqlConnection connection)
         {
-            var user = await FindUserByUsername(username);
-
-            if (user == null)
-            {
-                return false;
-            }
-
-            return user.Password == PasswordUtil.HashPassword(password);
-        }
-
-        private async Task<User?> CreateUser(User user, string userDataId, string userStatsId)
-        {
-            await using var connection = await DataSource.OpenConnectionAsync();
             await using var createUserCommand = new NpgsqlCommand(
-                $"INSERT INTO \"user\" (user_id, username, password, user_data_id, coins, user_stats_id) " +
-                $"VALUES (@userId, @username, @password, @userDataId, @coins, @userStatsId)",
+                $"INSERT INTO \"user\" (user_id, username, password, user_data_id, deck_id, coins, user_stats_id) " +
+                $"VALUES (@userId, @username, @password, @userDataId, @deckId, @coins, @userStatsId)",
                 connection);
 
             createUserCommand.Parameters.AddWithValue("@userId", Guid.NewGuid().ToString());
             createUserCommand.Parameters.AddWithValue("@username", user.Username);
-            createUserCommand.Parameters.AddWithValue("@password", PasswordUtil.HashPassword(user.Password));
+            createUserCommand.Parameters.AddWithValue("@password", user.Password);
             createUserCommand.Parameters.AddWithValue("@userDataId", userDataId);
+            createUserCommand.Parameters.AddWithValue("@deckId", user.Deck.Id);
             createUserCommand.Parameters.AddWithValue("@coins", user.Coins);
             createUserCommand.Parameters.AddWithValue("@userStatsId", userStatsId);
 
@@ -226,11 +369,10 @@ namespace MonsterTCG.Repository
             return user;
         }
 
-        private async Task<string> CreateUserData(UserData userData)
+        private async Task<string> CreateUserDataAsync(UserData userData, NpgsqlConnection connection)
         {
             var id = Guid.NewGuid().ToString();
 
-            await using var connection = await DataSource.OpenConnectionAsync();
             await using var createUserDataCommand = new NpgsqlCommand(
                 "INSERT INTO user_data (user_data_id, name, bio, image) " +
                 $"VALUES (@userDataId, @name, @bio, @image)",
@@ -247,11 +389,10 @@ namespace MonsterTCG.Repository
             return id;
         }
 
-        private async Task<string> CreateUserStats(UserStats userStats)
+        private async Task<string> CreateUserStatsAsync(UserStats userStats, NpgsqlConnection connection)
         {
             var id = Guid.NewGuid().ToString();
 
-            await using var connection = await DataSource.OpenConnectionAsync();
             await using var createUserStatsCommand = new NpgsqlCommand(
                 "INSERT INTO user_stats (user_stats_id, elo_score, wins, losses) " +
                 $"VALUES (@userStatsId, @elo_score, @wins, @losses)",
@@ -268,16 +409,31 @@ namespace MonsterTCG.Repository
             return id;
         }
 
-        public async Task<User?> UpdateUser(User user)
+        private async Task<Deck> CreateDeckAsync(Deck deck, NpgsqlConnection connection)
         {
-            var oldUser = await FindUserByUsername(user.Username);
+            await using var createDeckCommand = new NpgsqlCommand(
+                "INSERT INTO deck (deck_id, card_id_1, card_id_2, card_id_3, card_id_4) " +
+                "VALUES (@deckId, '', '', '', '')",
+                connection);
+
+            createDeckCommand.Parameters.AddWithValue("@deckId", deck.Id);
+
+            await createDeckCommand.PrepareAsync();
+            await createDeckCommand.ExecuteNonQueryAsync();
+
+            return deck;
+        }
+
+        public async Task UpdateUserAsync(User user)
+        {
+            var oldUser = await FindByUsernameAsync(user.Username);
 
             if (oldUser is null)
             {
-                return null;
+                throw new ArgumentException("User not found");
             }
 
-            await using var connection = await DataSource.OpenConnectionAsync();
+            await using var connection = await _dataSource.OpenConnectionAsync();
             await using var findUserKeysCommand = new NpgsqlCommand(
                 "SELECT user_id, user_data_id, user_stats_id FROM \"user\" " +
                 "WHERE \"user\".user_id = @userId",
@@ -288,14 +444,11 @@ namespace MonsterTCG.Repository
             await findUserKeysCommand.PrepareAsync();
             await using var findUserKeysReader = await findUserKeysCommand.ExecuteReaderAsync();
 
-            if (!await findUserKeysReader.ReadAsync())
-            {
-                return null;
-            }
+            await findUserKeysReader.ReadAsync();
 
-            var userId = findUserKeysReader.GetString(0);
-            var userDataId = findUserKeysReader.GetString(1);
-            var userStatsId = findUserKeysReader.GetString(2);
+            var userId = findUserKeysReader.GetString("user_id");
+            var userDataId = findUserKeysReader.GetString("user_data_id");
+            var userStatsId = findUserKeysReader.GetString("user_stats_id");
 
             await findUserKeysReader.DisposeAsync();
 
@@ -322,52 +475,37 @@ namespace MonsterTCG.Repository
                     !user.UserData.Bio.Equals(oldUser.UserData.Bio) ||
                     !user.UserData.Image.Equals(oldUser.UserData.Image))
                 {
-                    if (await UpdateUserData(user.UserData, userDataId) == null)
-                    {
-                        return null;
-                    }
+                    await UpdateUserDataAsync(user.UserData, userDataId, connection);
                 }
 
                 if (!user.UserStats.EloScore.Equals(oldUser.UserStats.EloScore) ||
                     !user.UserStats.Wins.Equals(oldUser.UserStats.Wins) ||
                     !user.UserStats.Losses.Equals(oldUser.UserStats.Losses))
                 {
-                    if (await UpdateUserStats(user.UserStats, userStatsId) == null)
-                    {
-                        return null;
-                    }
+                    await UpdateUserStatsAsync(user.UserStats, userStatsId, connection);
                 }
 
                 if (!user.Deck.Equals(oldUser.Deck))
                 {
-                    if (await UpdateUserDeck(user.Deck, user.Id) is null)
-                    {
-                        return null;
-                    }
+                    await UpdateDeckAsync(user.Deck, connection);
                 }
 
-                if (!user.Collection.Equals(oldUser.Collection))
+                if (!user.Collection.SequenceEqual(oldUser.Collection))
                 {
-                    if (await UpdateUserCollection(user.Collection, userId) is null)
-                    {
-                        return null;
-                    }
+                    await UpdateUserCollectionAsync(user.Collection, userId, connection);
                 }
 
                 await updateUserTransaction.CommitAsync();
-
-                return user;
             }
             catch (Exception)
             {
                 await updateUserTransaction.RollbackAsync();
-                return null;
             }
         }
 
-        private async Task<UserData?> UpdateUserData(UserData userData, string userDataId)
+        private async Task<UserData?> UpdateUserDataAsync(UserData userData, string userDataId,
+            NpgsqlConnection connection)
         {
-            await using var connection = await DataSource.OpenConnectionAsync();
             await using var updateUserDataCommand = new NpgsqlCommand(
                 "UPDATE user_data\n" +
                 "SET name = @newName, bio = @newBio, image = @newImage\n" +
@@ -385,9 +523,9 @@ namespace MonsterTCG.Repository
             return userData;
         }
 
-        private async Task<UserStats?> UpdateUserStats(UserStats userStats, string userStatsId)
+        private async Task<UserStats?> UpdateUserStatsAsync(UserStats userStats, string userStatsId,
+            NpgsqlConnection connection)
         {
-            await using var connection = await DataSource.OpenConnectionAsync();
             await using var updateUserStatsCommand = new NpgsqlCommand(
                 "UPDATE user_stats\n" +
                 "SET elo_score = @newEloScore, wins = @newWins, losses = @newLosses\n" +
@@ -405,31 +543,34 @@ namespace MonsterTCG.Repository
             return userStats;
         }
 
-        private async Task<(Card? card1, Card? card2, Card? card3, Card? card4)?> UpdateUserDeck(
-            (Card? card1, Card? card2, Card? card3, Card? card4) deck, string userId)
+        private async Task<Deck> UpdateDeckAsync(Deck deck, NpgsqlConnection connection)
         {
-            await using var connection = await DataSource.OpenConnectionAsync();
             await using var updateDeckCommand = new NpgsqlCommand(
                 "UPDATE deck\n" +
-                $"SET {string.Join(" AND ", Enumerable.Range(0, 4).Select(i => $"card_id_{i + 1} = @cardId{i + 1}"))}\n" +
+                $"SET card_id_1 = @cardId1, card_id_2 = @cardId2, card_id_3 = @cardId3, card_id_4 = @cardId4\n" +
                 "WHERE deck_id = @deckId",
                 connection);
-            
-            updateDeckCommand.Parameters.AddWithValue("@deckId", )
-            
-            
-            
-            return null;
+
+            updateDeckCommand.Parameters.AddWithValue("@deckId", deck.Id);
+            updateDeckCommand.Parameters.AddWithValue("@cardId1", deck.Cards.card1?.Id ?? "");
+            updateDeckCommand.Parameters.AddWithValue("@cardId2", deck.Cards.card2?.Id ?? "");
+            updateDeckCommand.Parameters.AddWithValue("@cardId3", deck.Cards.card3?.Id ?? "");
+            updateDeckCommand.Parameters.AddWithValue("@cardId4", deck.Cards.card4?.Id ?? "");
+
+            await updateDeckCommand.PrepareAsync();
+            await updateDeckCommand.ExecuteNonQueryAsync();
+
+            return deck;
         }
 
-        private async Task<List<Card>?> UpdateUserCollection(List<Card> collection, string userId)
+        private async Task<List<Card>?> UpdateUserCollectionAsync(List<Card> collection, string userId,
+            NpgsqlConnection connection)
         {
-            var oldCollection = await FindUserCards(userId);
+            var oldCollection = await FindUserCardsAsync(userId);
 
             var addedCards = collection.Except(oldCollection).ToList();
             var removedCards = oldCollection.Except(collection).ToList();
 
-            await using var connection = await DataSource.OpenConnectionAsync();
             await using var deleteRemovedUserCardsCommand = new NpgsqlCommand(
                 "DELETE FROM user_card\n" +
                 "WHERE user_id = @userId AND card_id = ANY(@removedCardIds)",

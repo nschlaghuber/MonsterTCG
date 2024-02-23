@@ -1,20 +1,20 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\niklas.schlaghuber\\Git\\MonsterTcg\\MonsterTCG.csproj": {}
+    "C:\\Users\\nschl\\Uni\\Git\\MonsterTCG\\MonsterTCG.csproj": {}
   },
   "projects": {
-    "C:\\Users\\niklas.schlaghuber\\Git\\MonsterTcg\\MonsterTCG.csproj": {
+    "C:\\Users\\nschl\\Uni\\Git\\MonsterTCG\\MonsterTCG.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\niklas.schlaghuber\\Git\\MonsterTcg\\MonsterTCG.csproj",
+        "projectUniqueName": "C:\\Users\\nschl\\Uni\\Git\\MonsterTCG\\MonsterTCG.csproj",
         "projectName": "MonsterTCG",
-        "projectPath": "C:\\Users\\niklas.schlaghuber\\Git\\MonsterTcg\\MonsterTCG.csproj",
-        "packagesPath": "C:\\Users\\niklas.schlaghuber\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\niklas.schlaghuber\\Git\\MonsterTcg\\obj\\",
+        "projectPath": "C:\\Users\\nschl\\Uni\\Git\\MonsterTCG\\MonsterTCG.csproj",
+        "packagesPath": "C:\\Users\\nschl\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\nschl\\Uni\\Git\\MonsterTCG\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "C:\\Users\\niklas.schlaghuber\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\nschl\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
         "originalTargetFrameworks": [
@@ -60,30 +60,12 @@
           ],
           "assetTargetFallback": true,
           "warn": true,
-          "downloadDependencies": [
-            {
-              "name": "Microsoft.AspNetCore.App.Ref",
-              "version": "[7.0.14, 7.0.14]"
-            },
-            {
-              "name": "Microsoft.NETCore.App.Host.win-x64",
-              "version": "[7.0.14, 7.0.14]"
-            },
-            {
-              "name": "Microsoft.NETCore.App.Ref",
-              "version": "[7.0.14, 7.0.14]"
-            },
-            {
-              "name": "Microsoft.WindowsDesktop.App.Ref",
-              "version": "[7.0.14, 7.0.14]"
-            }
-          ],
           "frameworkReferences": {
             "Microsoft.NETCore.App": {
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.100\\RuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\7.0.403\\RuntimeIdentifierGraph.json"
         }
       }
     }

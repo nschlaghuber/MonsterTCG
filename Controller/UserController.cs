@@ -1,8 +1,10 @@
 ﻿using System.Net;
 using MonsterTCG.Model;
 using MonsterTCG.Model.Http;
+using MonsterTCG.Model.User;
 using MonsterTCG.Repository;
 using MonsterTCG.Util;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using HttpMethod = MonsterTCG.Model.Http.HttpMethod;
 
@@ -10,28 +12,36 @@ namespace MonsterTCG.Controller
 {
     public class UserController : Controller
     {
-        private readonly UserRepository _userRepository;
+        private readonly IUserRepository _userRepository;
 
-        public UserController(UserRepository userRepository)
+        public UserController(IUserRepository userRepository)
         {
             _userRepository = userRepository;
         }
 
-        public override bool ProcessRequest(HttpRequestEventArgs e)
+        public override async Task<bool> ProcessRequest(HttpRequestEventArgs e)
         {
             try
             {
-                var test = e.Request.Path.TrimStart('/').Split('/');
-                switch (test)
+                var fullPath = e.Request.Path.TrimStart('/').Split('/');
+                HttpResponse response;
+                switch (fullPath)
                 {
                     case ["users"] when e.Request.Method == HttpMethod.POST:
-                        RegisterUser(e);
+                        response = await RegisterUser(e.Request);
+                        e.Reply(response.Status, response.Message);
                         return true;
-                    case ["users", _] parts when e.Request.Method == HttpMethod.GET:
-                        GetUser(parts[1], e);
+                    case ["users", var username] when e.Request.Method == HttpMethod.GET:
+                        response = await GetUserData(username, e.Request);
+                        e.Reply(response.Status, response.Message);
+                        return true;
+                    case ["users", var username] when e.Request.Method == HttpMethod.PUT:
+                        response = await UpdateUserData(username, e.Request);
+                        e.Reply(response.Status, response.Message);
                         return true;
                     case ["sessions"] when e.Request.Method == HttpMethod.POST:
-                        LoginUser(e);
+                        response = await LoginUser(e.Request);
+                        e.Reply(response.Status, response.Message);
                         return true;
                     default:
                         return false;
@@ -44,94 +54,124 @@ namespace MonsterTCG.Controller
             }
         }
 
-        public async void RegisterUser(HttpRequestEventArgs httpRequestEventArgs)
+        public async Task<HttpResponse> RegisterUser(HttpRequest request)
         {
-            var payloadObject = JObject.Parse(httpRequestEventArgs.Request.Payload);
+            UserCredentials? userCredentials;
 
-            var username = (string?)payloadObject["Username"];
-            var password = (string?)payloadObject["Password"];
-
-            if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
+            var settings = new JsonSerializerSettings
             {
-                httpRequestEventArgs.Reply(HttpStatusCode.BadRequest, "Please provide username and password");
-                return;
+                Error = (_, args) =>
+                {
+                    args.ErrorContext.Handled = true;
+                    userCredentials = null;
+                },
+                MissingMemberHandling = MissingMemberHandling.Error,
+            };
+
+            userCredentials = JsonConvert.DeserializeObject<UserCredentials>(request.Payload, settings);
+
+            if (userCredentials is null)
+            {
+                return new HttpResponse(HttpStatusCode.BadRequest, "Please provide username and password");
             }
 
-            if (await _userRepository.ExistsByUsername(username))
+            if (await _userRepository.ExistsByUsernameAsync(userCredentials.Username))
             {
-                httpRequestEventArgs.Reply(HttpStatusCode.BadRequest, "User with same username already registered");
-                return;
+                return new HttpResponse(HttpStatusCode.BadRequest, "User with same username already registered");
             }
 
-            if(await _userRepository.CreateUser(new User(username, password)) is null)
-            {
-                httpRequestEventArgs.Reply(HttpStatusCode.InternalServerError, "An unknown error has occured");
-                return;
-            }
+            await _userRepository.CreateUserAsync(
+                User.Create(
+                    userCredentials.Username,
+                    PasswordUtil.HashPassword(userCredentials.Password)
+                )
+            );
 
-            httpRequestEventArgs.Reply(HttpStatusCode.Created, "User successfully created");
+            return new HttpResponse(HttpStatusCode.Created, "User successfully created");
         }
 
-        public async void GetUser(string username, HttpRequestEventArgs httpRequestEventArgs)
+        public async Task<HttpResponse> GetUserData(string username, HttpRequest request)
         {
-            var token = httpRequestEventArgs.GetBearerToken();
+            var token = request.GetBearerToken();
 
-            if (token == null || TokenUtil.GetUsernameFromToken(token) != "admin" || TokenUtil.GetUsernameFromToken(token) != username)
+            var test = TokenUtil.GetUsernameFromToken(token!);
+
+            if (token is null || (TokenUtil.GetUsernameFromToken(token) != "admin" &&
+                                  TokenUtil.GetUsernameFromToken(token) != username))
             {
-                httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
-                return;
+                return new HttpResponse(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
             }
 
-            var user = await _userRepository.FindUserByUsername(username);
+            var user = await _userRepository.FindByUsernameAsync(username);
 
-            if (user == null)
+            if (user is null)
             {
-                httpRequestEventArgs.Reply(HttpStatusCode.NotFound, "User not found");
+                return new HttpResponse(HttpStatusCode.NotFound, "User not found");
             }
 
-            httpRequestEventArgs.Reply(HttpStatusCode.OK, "Data successfully retrieved");
+            return new HttpResponse(HttpStatusCode.OK, JsonConvert.SerializeObject(user.UserData));
         }
 
-        public async void UpdateUser(HttpRequestEventArgs httpRequestEventArgs)
+        public async Task<HttpResponse> UpdateUserData(string username, HttpRequest request)
         {
-            var payloadObject = JObject.Parse(httpRequestEventArgs.Request.Payload);
+            var token = request.GetBearerToken();
 
+            if (token is null || (TokenUtil.GetUsernameFromToken(token) != "admin" &&
+                                  TokenUtil.GetUsernameFromToken(token) != username))
+            {
+                return new HttpResponse(HttpStatusCode.Unauthorized,
+                    "A user can only be updated by the admin or themselves");
+            }
 
+            var user = await _userRepository.FindByUsernameAsync(username);
 
-            throw new NotImplementedException();
+            if (user is null)
+            {
+                return new HttpResponse(HttpStatusCode.NotFound, "User does not exist");
+            }
+
+            var userData = JsonConvert.DeserializeObject<UserData>(request.Payload);
+
+            if (userData?.Name is null || userData?.Bio is null || userData?.Image is null)
+            {
+                return new HttpResponse(HttpStatusCode.BadRequest, "Request body missing or invalid");
+            }
+
+            user.SetUserData(userData);
+
+            await _userRepository.UpdateUserAsync(user);
+
+            return new HttpResponse(HttpStatusCode.OK, "User data successfully updated");
         }
 
-        public async void LoginUser(HttpRequestEventArgs httpRequestEventArgs)
+        public async Task<HttpResponse> LoginUser(HttpRequest request)
         {
-            var payloadObject = JObject.Parse(httpRequestEventArgs.Request.Payload);
+            UserCredentials? userCredentials;
 
-            if (!payloadObject.TryGetValue("Username", out JToken? usernameJToken))
+            var settings = new JsonSerializerSettings
             {
-                httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Invalid username/password provided");
-                return;
-            }
-            if (!payloadObject.TryGetValue("Password", out JToken? passwordJToken))
-            {
-                httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Invalid username/password provided");
-                return;
-            }
+                Error = (_, args) =>
+                {
+                    args.ErrorContext.Handled = true;
+                    userCredentials = null;
+                },
+                MissingMemberHandling = MissingMemberHandling.Error,
+            };
 
-            var username = (string?)usernameJToken;
-            var password = (string?)passwordJToken;
+            userCredentials =
+                JsonConvert.DeserializeObject<UserCredentials>(request.Payload, settings);
 
-            if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
+            if (userCredentials is null)
             {
-                httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Invalid username/password provided");
-                return;
+                return new HttpResponse(HttpStatusCode.BadRequest, "Username/password missing or invalid");
             }
 
-            if (!await _userRepository.AuthorizeUser(username, password))
+            if (!await _userRepository.AuthorizeUserAsync(userCredentials.Username, userCredentials.Password))
             {
-                httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Invalid username/password provided");
-                return;
+                return new HttpResponse(HttpStatusCode.Unauthorized, "Invalid username/password provided");
             }
 
-            httpRequestEventArgs.Reply(HttpStatusCode.OK, "User login successful\n" + TokenUtil.GetTokenFromUsername(username));
+            return new HttpResponse(HttpStatusCode.OK, TokenUtil.GetTokenFromUsername(userCredentials.Username));
         }
     }
 }

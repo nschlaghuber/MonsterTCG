@@ -4,12 +4,9 @@ using System.Linq;
 using System.Net;
 using System.Text;
 using System.Threading.Tasks;
+using MonsterTCG.Model.Deck;
 
 namespace MonsterTCG.Model.Http
 {
-    public class HttpResponse
-    {
-        public HttpStatusCode StatusCode { get; set; }
-        public string Message { get; set; }
-    }
+    public record HttpResponse(HttpStatusCode Status, string? Message, FormatType FormatType = FormatType.Json);
 }
