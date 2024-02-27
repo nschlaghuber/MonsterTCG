@@ -11,6 +11,7 @@ namespace MonsterTCG.Util
     {
         public static string HashPassword(string password)
         {
+            var test = Convert.ToHexString(MD5.HashData(Encoding.UTF8.GetBytes("")));
             return Convert.ToHexString(MD5.HashData(Encoding.UTF8.GetBytes(password)));
         }
     }

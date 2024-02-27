@@ -22,18 +22,20 @@ namespace MonsterTCG.Controller
             _userRepository = userRepository;
         }
 
-        public override Task<bool> ProcessRequest(HttpRequestEventArgs e)
+        public override async Task<bool> ProcessRequest(HttpRequestEventArgs e)
         {
             try
             {
                 var pathParts = e.Request.Path.TrimStart('/').Split('/');
+
+                HttpResponse? response;
                 switch (pathParts)
                 {
                     case ["packages"] when e.Request.Method == HttpMethod.POST:
-                        CreatePackage(e);
+                        e.Reply(await CreatePackage(e.Request));
                         return true;
                     case ["transactions", "packages"] when e.Request.Method == HttpMethod.POST:
-                        AcquirePackage(e);
+                        e.Reply(await AcquirePackage(e.Request));
                         return true;
                     default:
                         return false;
@@ -41,19 +43,18 @@ namespace MonsterTCG.Controller
             }
             catch (Exception)
             {
-                e.Reply(HttpStatusCode.InternalServerError, "An unknown error has occured");
+                e.Reply(new HttpResponse(HttpStatusCode.InternalServerError, "An unknown error has occured"));
                 return true;
             }
         }
 
-        private async void AcquirePackage(HttpRequest request)
+        private async Task<HttpResponse> AcquirePackage(HttpRequest request)
         {
-            var token = httpRequestEventArgs.GetBearerToken();
+            var token = request.GetBearerToken();
 
             if (token is null)
             {
-                httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
-                return;
+                return new HttpResponse(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
             }
 
             var authenticatedUser =
@@ -61,22 +62,19 @@ namespace MonsterTCG.Controller
 
             if (authenticatedUser is null)
             {
-                httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
-                return;
+                return new HttpResponse(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
             }
 
             if (authenticatedUser.Coins < 5)
             {
-                httpRequestEventArgs.Reply(HttpStatusCode.Forbidden, "Not enough money for buying a card package");
-                return;
+                return new HttpResponse(HttpStatusCode.Forbidden, "Not enough money for buying a card package");
             }
 
             var package = await _packageRepository.FindFirstPackageAsync();
 
             if (package is null)
             {
-                httpRequestEventArgs.Reply(HttpStatusCode.NotFound, "No card package available for buying");
-                return;
+                return new HttpResponse(HttpStatusCode.NotFound, "No card package available for buying");
             }
 
             authenticatedUser.Collection.AddRange(package.CardList);
@@ -87,27 +85,24 @@ namespace MonsterTCG.Controller
 
             if (!await _packageRepository.DeletePackageByIdAsync(package.PackageId))
             {
-                httpRequestEventArgs.Reply(HttpStatusCode.InternalServerError, "An unknown error has occured");
-                return;
+                return new HttpResponse(HttpStatusCode.InternalServerError, "An unknown error has occured");
             }
 
-            httpRequestEventArgs.Reply(HttpStatusCode.OK, "A package has been successfully bought");
+            return new HttpResponse(HttpStatusCode.OK, "A package has been successfully bought");
         }
 
-        private async void CreatePackage(HttpRequest request)
+        private async Task<HttpResponse> CreatePackage(HttpRequest request)
         {
-            var token = httpRequestEventArgs.GetBearerToken();
+            var token = request.GetBearerToken();
 
             if (token is null)
             {
-                httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
-                return;
+                return new HttpResponse(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
             }
 
             if (TokenUtil.GetUsernameFromToken(token) != "admin")
             {
-                httpRequestEventArgs.Reply(HttpStatusCode.Forbidden, "Provided user is not \"admin\"");
-                return;
+                return new HttpResponse(HttpStatusCode.Forbidden, "Provided user is not \"admin\"");
             }
 
             IEnumerable<CreateCard>? createCards;
@@ -123,18 +118,16 @@ namespace MonsterTCG.Controller
             };
 
             createCards =
-                JsonConvert.DeserializeObject<List<CreateCard>>(httpRequestEventArgs.Request.Payload, settings);
+                JsonConvert.DeserializeObject<List<CreateCard>>(request.Payload, settings);
 
             if (createCards is null || !createCards.Any())
             {
-                httpRequestEventArgs.Reply(HttpStatusCode.BadRequest, "Package invalid or missing");
-                return;
+                return new HttpResponse(HttpStatusCode.BadRequest, "Package invalid or missing");
             }
 
             if (createCards.Count() != 5)
             {
-                httpRequestEventArgs.Reply(HttpStatusCode.BadRequest, "Package does not contain 5 cards");
-                return;
+                return new HttpResponse(HttpStatusCode.BadRequest, "Package does not contain 5 cards");
             }
 
             var packageCards = createCards
@@ -155,7 +148,7 @@ namespace MonsterTCG.Controller
                     )
                 ))
             {
-                httpRequestEventArgs.Reply(HttpStatusCode.Conflict, "Package with the same cards already created");
+                return new HttpResponse(HttpStatusCode.Conflict, "Package with the same cards already created");
             }
 
             var package = new Package(Guid.NewGuid().ToString(),
@@ -168,7 +161,7 @@ namespace MonsterTCG.Controller
 
             await _packageRepository.CreatePackageAsync(package);
 
-            httpRequestEventArgs.Reply(HttpStatusCode.Created, "Package and missing cards successfully created");
+            return new HttpResponse(HttpStatusCode.Created, "Package and missing cards successfully created");
         }
     }
 }

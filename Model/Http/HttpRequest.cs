@@ -24,28 +24,28 @@ namespace MonsterTCG.Model.Http
         {
             get
             {
-                if (plainMessage == null)
+                if (_plainMessage == null)
                 {
                     return $"{Method} {Path} HTTP/1.1\r\n" +
                            $"Host: localhost:10001\r\n" +
                            $"User-Agent: curl/8.4.0\r\n" +
                            $"Accept: */*\r\n" +
                            $"Content-Type: application/json\r\n" +
-                           $"Content-Length: {(Payload != null ? Encoding.ASCII.GetByteCount(Payload) : "0")}\r\n" +
+                           $"Content-Length: {(string.IsNullOrEmpty(Payload) ? Encoding.ASCII.GetByteCount(Payload) : "0")}\r\n" +
                            $"\r\n" +
                            $"{Payload}";
                 }
 
-                return plainMessage;
+                return _plainMessage;
             }
-            set { plainMessage = value.ToString(); }
+            set => _plainMessage = value;
         }
 
-        private string plainMessage;
+        private string? _plainMessage;
         public HttpMethod Method { get; set; }
-        public List<HttpHeader> Headers { get; set; }
+        public List<HttpHeader> Headers { get; init; } = new();
         public string Path { get; set; } = string.Empty;
-        public string Payload { get; set; }
+        public string Payload { get; init; } = "";
 
         public HttpRequest()
         {
@@ -56,23 +56,23 @@ namespace MonsterTCG.Model.Http
             PlainMessage = plainMessage;
             Payload = string.Empty;
 
-            string[] lines = plainMessage.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
-            bool inheaders = true;
+            var lines = plainMessage.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
+            var inHeaders = true;
             List<HttpHeader> headers = new();
 
-            for (int i = 0; i < lines.Length; i++)
+            for (var i = 0; i < lines.Length; i++)
             {
                 if (i == 0)
                 {
-                    string[] inc = lines[0].Split(' ');
+                    var inc = lines[0].Split(' ');
                     Method = Enum.Parse<HttpMethod>(inc[0]);
                     Path = inc[1];
                 }
-                else if (inheaders)
+                else if (inHeaders)
                 {
                     if (string.IsNullOrWhiteSpace(lines[i]))
                     {
-                        inheaders = false;
+                        inHeaders = false;
                     }
                     else
                     {
@@ -96,7 +96,7 @@ namespace MonsterTCG.Model.Http
         public (string, string)? GetAuthorizationHeader()
         {
             var authHeader = Headers.FirstOrDefault(header => header.Name == "Authorization");
-            if (authHeader == null)
+            if (authHeader is null)
             {
                 return null;
             }

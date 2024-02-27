@@ -24,24 +24,19 @@ namespace MonsterTCG.Controller
             try
             {
                 var fullPath = e.Request.Path.TrimStart('/').Split('/');
-                HttpResponse response;
                 switch (fullPath)
                 {
                     case ["users"] when e.Request.Method == HttpMethod.POST:
-                        response = await RegisterUser(e.Request);
-                        e.Reply(response.Status, response.Message);
+                        e.Reply(await RegisterUser(e.Request));
                         return true;
                     case ["users", var username] when e.Request.Method == HttpMethod.GET:
-                        response = await GetUserData(username, e.Request);
-                        e.Reply(response.Status, response.Message);
+                        e.Reply(await GetUserData(username, e.Request));
                         return true;
                     case ["users", var username] when e.Request.Method == HttpMethod.PUT:
-                        response = await UpdateUserData(username, e.Request);
-                        e.Reply(response.Status, response.Message);
+                        e.Reply(await UpdateUserData(username, e.Request));
                         return true;
                     case ["sessions"] when e.Request.Method == HttpMethod.POST:
-                        response = await LoginUser(e.Request);
-                        e.Reply(response.Status, response.Message);
+                        e.Reply(await LoginUser(e.Request));
                         return true;
                     default:
                         return false;
@@ -49,7 +44,7 @@ namespace MonsterTCG.Controller
             }
             catch (Exception)
             {
-                e.Reply(HttpStatusCode.InternalServerError, "An unknown error has occured");
+                e.Reply(new HttpResponse(HttpStatusCode.InternalServerError, "An unknown error has occured"));
                 return true;
             }
         }
@@ -70,7 +65,7 @@ namespace MonsterTCG.Controller
 
             userCredentials = JsonConvert.DeserializeObject<UserCredentials>(request.Payload, settings);
 
-            if (userCredentials is null)
+            if (userCredentials is null || string.IsNullOrEmpty(userCredentials.Username) || string.IsNullOrEmpty(userCredentials.Password))
             {
                 return new HttpResponse(HttpStatusCode.BadRequest, "Please provide username and password");
             }
@@ -93,8 +88,6 @@ namespace MonsterTCG.Controller
         public async Task<HttpResponse> GetUserData(string username, HttpRequest request)
         {
             var token = request.GetBearerToken();
-
-            var test = TokenUtil.GetUsernameFromToken(token!);
 
             if (token is null || (TokenUtil.GetUsernameFromToken(token) != "admin" &&
                                   TokenUtil.GetUsernameFromToken(token) != username))
@@ -158,15 +151,14 @@ namespace MonsterTCG.Controller
                 MissingMemberHandling = MissingMemberHandling.Error,
             };
 
-            userCredentials =
-                JsonConvert.DeserializeObject<UserCredentials>(request.Payload, settings);
+            userCredentials = JsonConvert.DeserializeObject<UserCredentials>(request.Payload, settings);
 
-            if (userCredentials is null)
+            if (userCredentials is null || string.IsNullOrEmpty(userCredentials.Username) || string.IsNullOrEmpty(userCredentials.Password))
             {
                 return new HttpResponse(HttpStatusCode.BadRequest, "Username/password missing or invalid");
             }
 
-            if (!await _userRepository.AuthorizeUserAsync(userCredentials.Username, userCredentials.Password))
+            if (!await _userRepository.AuthorizeUserAsync(new UserCredentials(userCredentials.Username, userCredentials.Password)))
             {
                 return new HttpResponse(HttpStatusCode.Unauthorized, "Invalid username/password provided");
             }

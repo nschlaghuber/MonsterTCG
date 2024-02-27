@@ -28,10 +28,12 @@ public class CardController : Controller
             var parts = e.Request.Path.Split('?');
             var pathParts = parts[0].TrimStart('/').Split('/');
             var parameters = parts.Length > 1 ? parts[1] : "";
+
+            HttpResponse? response;
             switch (pathParts)
             {
                 case ["cards"] when e.Request.Method == HttpMethod.GET:
-                    GetCards(e);
+                    e.Reply(await GetCards(e.Request));
                     return true;
                 case ["deck"] when e.Request.Method == HttpMethod.GET:
                     var formatType = FormatType.Json;
@@ -44,13 +46,13 @@ public class CardController : Controller
                         }
                         catch (Exception)
                         {
-                            e.Reply(HttpStatusCode.BadRequest, "Invalid Parameters");
+                            e.Reply(new HttpResponse(HttpStatusCode.BadRequest, "Invalid Parameters"));
                         }
                     }
-                    GetDeck(e, formatType);
+                    e.Reply(await GetDeck(e.Request, formatType));
                     return true;
                 case ["deck"] when e.Request.Method == HttpMethod.PUT:
-                    ConfigureDeck(e);
+                    e.Reply(await ConfigureDeck(e.Request));
                     return true;
                 default:
                     return false;
@@ -58,60 +60,54 @@ public class CardController : Controller
         }
         catch (Exception)
         {
-            e.Reply(HttpStatusCode.InternalServerError, "An unknown error has occured");
+            e.Reply(new HttpResponse(HttpStatusCode.InternalServerError, "An unknown error has occured"));
             return true;
         }
     }
 
-    public async void GetCards(HttpRequest request)
+    public async Task<HttpResponse> GetCards(HttpRequest request)
     {
-        var token = httpRequestEventArgs.GetBearerToken();
+        var token = request.GetBearerToken();
 
         if (token is null)
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
-            return;
+            return new HttpResponse(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
         }
 
         var authenticatedUser = await _userRepository.FindByUsernameAsync(TokenUtil.GetUsernameFromToken(token));
 
         if (authenticatedUser is null)
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
-            return;
+            return new HttpResponse(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
         }
 
         if (!authenticatedUser.Collection.Any())
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.NoContent, "User does not have any cards");
-            return;
+            return new HttpResponse(HttpStatusCode.NoContent, "User does not have any cards");
         }
         
-        httpRequestEventArgs.Reply(HttpStatusCode.OK, JsonConvert.SerializeObject(authenticatedUser.Collection, Formatting.Indented));
+        return new HttpResponse(HttpStatusCode.OK, JsonConvert.SerializeObject(authenticatedUser.Collection, Formatting.Indented));
     }
 
-    public async void GetDeck(HttpRequest request, FormatType formatType)
+    public async Task<HttpResponse> GetDeck(HttpRequest request, FormatType formatType)
     {
-        var token = httpRequestEventArgs.GetBearerToken();
+        var token = request.GetBearerToken();
 
         if (token is null)
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
-            return;
+            return new HttpResponse(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
         }
 
         var authenticatedUser = await _userRepository.FindByUsernameAsync(TokenUtil.GetUsernameFromToken(token));
 
         if (authenticatedUser is null)
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
-            return;
+            return new HttpResponse(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
         }
         
         if (!authenticatedUser.DeckCardsAsList.OfType<Card>().Any())
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.NoContent, "Deck is empty");
-            return;
+            return new HttpResponse(HttpStatusCode.NoContent, "Deck is empty");
         }
 
         var responseMessage = "";
@@ -126,39 +122,35 @@ public class CardController : Controller
                 break;
         }
         
-        httpRequestEventArgs.Reply(HttpStatusCode.OK, responseMessage, formatType);
+        return new HttpResponse(HttpStatusCode.OK, responseMessage, formatType);
     }
 
-    public async void ConfigureDeck(HttpRequest request)
+    public async Task<HttpResponse> ConfigureDeck(HttpRequest request)
     {
-        var token = httpRequestEventArgs.GetBearerToken();
+        var token = request.GetBearerToken();
 
         if (token is null)
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
-            return;
+            return new HttpResponse(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
         }
 
         var authenticatedUser = await _userRepository.FindByUsernameAsync(TokenUtil.GetUsernameFromToken(token));
 
         if (authenticatedUser is null)
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
-            return;
+            return new HttpResponse(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
         }
 
-        var cardIds = JsonConvert.DeserializeObject<List<string>>(httpRequestEventArgs.Request.Payload);
+        var cardIds = JsonConvert.DeserializeObject<List<string>>(request.Payload);
 
         if (cardIds is not { Count: 4 })
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.BadRequest, "The provided deck did not include the required amount of cards");
-            return;
+            return new HttpResponse(HttpStatusCode.BadRequest, "The provided deck did not include the required amount of cards");
         }
 
         if (!await _userRepository.HasCardsFromIdsAsync(authenticatedUser, cardIds))
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.Forbidden, "At least one of the provided cards does not belong to the user or is not available.");
-            return;
+            return new HttpResponse(HttpStatusCode.Forbidden, "At least one of the provided cards does not belong to the user or is not available.");
         }
         
         var newDeckList = (await _cardRepository.FindCardsByIdsAsync(cardIds))?.ToList();
@@ -167,6 +159,6 @@ public class CardController : Controller
 
         await _userRepository.UpdateUserAsync(authenticatedUser);
         
-        httpRequestEventArgs.Reply(HttpStatusCode.OK, "The deck has been successfully configured");
+        return new HttpResponse(HttpStatusCode.OK, "The deck has been successfully configured");
     }
 }

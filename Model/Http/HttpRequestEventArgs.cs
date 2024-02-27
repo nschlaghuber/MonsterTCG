@@ -15,11 +15,11 @@ namespace MonsterTCG.Model.Http
         }
         public virtual HttpRequest Request { get; }
 
-        public virtual void Reply(HttpStatusCode status, string? payload, FormatType formatType = FormatType.Json)
+        public virtual void Reply(HttpResponse response)
         {
             var responseBuilder = new StringBuilder();
 
-            switch (status)
+            switch (response.Status)
             {
                 case HttpStatusCode.OK:
                     responseBuilder.AppendLine("HTTP/1.1 200 OK"); break;
@@ -43,8 +43,8 @@ namespace MonsterTCG.Model.Http
                     responseBuilder.AppendLine("HTTP/1.1 418 I'm a Teapot"); break;
             }
 
-            responseBuilder.Append($"Content-Type: ");
-            switch (formatType)
+            responseBuilder.Append("Content-Type: ");
+            switch (response.FormatType)
             {
                 case FormatType.Json:
                     responseBuilder.AppendLine("application/json");
@@ -54,12 +54,12 @@ namespace MonsterTCG.Model.Http
                     break;
             }
 
-            responseBuilder.AppendLine($"Content-Length: {(payload is not null ? Encoding.ASCII.GetByteCount(payload) : "0\r\n")}");
+            responseBuilder.AppendLine($"Content-Length: {(response.Message is not null ? Encoding.ASCII.GetByteCount(response.Message) : "0\r\n")}");
 
-            if (!string.IsNullOrEmpty(payload)) 
+            if (!string.IsNullOrEmpty(response.Message)) 
             {
                 responseBuilder.AppendLine();
-                responseBuilder.Append(payload); 
+                responseBuilder.Append(response.Message); 
             }
             var buffer = Encoding.ASCII.GetBytes(responseBuilder.ToString());
             Client.Send(buffer);

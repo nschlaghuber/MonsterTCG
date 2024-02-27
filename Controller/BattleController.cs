@@ -3,6 +3,7 @@ using MonsterTCG.Model.Battle;
 using MonsterTCG.Model.Card;
 using MonsterTCG.Model.Deck;
 using MonsterTCG.Model.Http;
+using MonsterTCG.Model.User;
 using MonsterTCG.Repository;
 using MonsterTCG.Service.BattleService;
 using MonsterTCG.Util;
@@ -35,16 +36,13 @@ public class BattleController : Controller
             switch (fullPath)
             {
                 case ["stats"] when e.Request.Method == HttpMethod.GET:
-                    var response = await GetStats(e.Request);
-                    e.Reply(response.Status, response.Message);
+                    e.Reply(await GetStats(e.Request));
                     return true;
                 case ["scoreboard"] when e.Request.Method == HttpMethod.GET:
-                    var response = await GetScoreboard(e.Request);
-                    e.Reply(response.Status, response.Message);
+                    e.Reply(await GetScoreboard(e.Request));
                     return true;
                 case ["battles"] when e.Request.Method == HttpMethod.POST:
-                    var response = await DoBattle(e.Request);
-                    e.Reply(response.Status, response.Message);
+                    await DoBattle(e.Request, e.Reply);
                     return true;
                 default:
                     return false;
@@ -52,7 +50,7 @@ public class BattleController : Controller
         }
         catch (Exception)
         {
-            e.Reply(HttpStatusCode.InternalServerError, "An unknown error has occured");
+            e.Reply(new HttpResponse(HttpStatusCode.InternalServerError, "An unknown error has occured"));
             return true;
         }
     }
@@ -74,7 +72,14 @@ public class BattleController : Controller
         }
 
         return new HttpResponse(HttpStatusCode.OK,
-            JsonConvert.SerializeObject(authenticatedUser.UserStats, Formatting.Indented));
+            JsonConvert.SerializeObject(
+                new GetUserStats(
+                    authenticatedUser.Username,
+                    authenticatedUser.UserStats.EloScore,
+                    authenticatedUser.UserStats.Wins,
+                    authenticatedUser.UserStats.Losses),
+                Formatting.Indented)
+        );
     }
 
     public async Task<HttpResponse> GetScoreboard(HttpRequest request)
@@ -104,36 +109,42 @@ public class BattleController : Controller
         return new HttpResponse(HttpStatusCode.OK, JsonConvert.SerializeObject(scoreboard));
     }
 
-    private async Task<HttpResponse> DoBattle(HttpRequest request)
+    public async Task DoBattle(HttpRequest request, Action<HttpResponse> onFinished)
     {
         var token = request.GetBearerToken();
 
         if (token is null)
         {
-            return new HttpResponse(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
+            onFinished(new HttpResponse(HttpStatusCode.Unauthorized, "Access token is missing or invalid"));
+            return;
         }
 
         var authenticatedUser = await _userRepository.FindByUsernameAsync(TokenUtil.GetUsernameFromToken(token));
 
         if (authenticatedUser is null)
         {
-            return new HttpResponse(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
+            onFinished(new HttpResponse(HttpStatusCode.Unauthorized, "Access token is missing or invalid"));
+            return;
         }
 
         if (!TupleUtil.GetListFromTuple<Card>(authenticatedUser.Deck.Cards).Any(card => card is not null))
         {
-            return new HttpResponse(HttpStatusCode.BadRequest, "User has not configured their deck");
+            onFinished(new HttpResponse(HttpStatusCode.BadRequest, "User has not configured their deck"));
+            return;
         }
 
         if (string.IsNullOrEmpty(request.Payload) ||
             !JObject.Parse(request.Payload).TryGetValue("Bet", out var betJToken))
         {
-            return new HttpResponse(HttpStatusCode.BadRequest, "No bet placed");
+            onFinished(new HttpResponse(HttpStatusCode.BadRequest, "No bet placed"));
+            return;
         }
 
         if (!Enum.TryParse<Bet>(betJToken!.ToString(), out var bet))
         {
-            return new HttpResponse(HttpStatusCode.BadRequest, "Possible bets are: None (0), Small (5), Medium (10), Large (20), Huge (50), AllIn");
+            onFinished(new HttpResponse(HttpStatusCode.BadRequest,
+                "Possible bets are: None (0), Small (5), Medium (10), Large (20), Huge (50), AllIn"));
+            return;
         }
 
         var battleRequest = new BattleRequest(authenticatedUser, bet);
@@ -155,13 +166,15 @@ public class BattleController : Controller
 
             await _userRepository.UpdateUserAsync(authenticatedUser);
 
-            return new HttpResponse(HttpStatusCode.OK,
+            onFinished(new HttpResponse(HttpStatusCode.OK,
                 $"You {args.Outcome switch {
-                        Outcome.Victory => "won!",
-                        Outcome.Defeat => "lost...",
-                        Outcome.Draw => "drew."
-                    }
-                }\n\nHere's the battle log:\n\n=======================================\n\n" + args.BattleLog, FormatType.Plain);
+                    Outcome.Victory => "won!",
+                    Outcome.Defeat => "lost...",
+                    Outcome.Draw => "drew.",
+                    _ => "'ve unlocked a secret outcome" }
+                }\n\nHere's the battle log:\n\n=======================================\n\n" + args.BattleLog,
+                FormatType.Plain)
+            );
         };
 
         _battleService.QueueForBattle(battleRequest);

@@ -9,9 +9,11 @@ namespace MonsterTCG.Repository
 {
     public class UserRepository : IUserRepository
     {
-        private readonly NpgsqlDataSource _dataSource;
-        private readonly ICardRepository _cardRepository;
-        private readonly ITradeRepository _tradeRepository;
+        private readonly NpgsqlDataSource _dataSource = null!;
+        private readonly ICardRepository _cardRepository = null!;
+        private readonly ITradeRepository _tradeRepository = null!;
+
+        public UserRepository() { }
 
         public UserRepository(NpgsqlDataSource dataSource, ICardRepository cardRepository,
             ITradeRepository tradeRepository)
@@ -318,11 +320,11 @@ namespace MonsterTCG.Repository
             return rowCount == cardIds.Count;
         }
 
-        public async Task<bool> AuthorizeUserAsync(string username, string password)
+        public async Task<bool> AuthorizeUserAsync(UserCredentials providedCredentials)
         {
-            var credentials = await FindUserCredentialsAsync(username);
+            var foundCredentials = await FindUserCredentialsAsync(providedCredentials.Username);
 
-            return credentials is not null && credentials.Password == PasswordUtil.HashPassword(password);
+            return foundCredentials is not null && foundCredentials.Password == PasswordUtil.HashPassword(providedCredentials.Password);
         }
 
         public async Task CreateUserAsync(User user)

@@ -7,7 +7,7 @@ using MonsterTCG.Service.BattleService;
 using Npgsql;
 
 
-const bool rebuildTables = true;
+const bool rebuildTables = false;
 
 
 var httpServer = new HttpServer();
@@ -76,5 +76,5 @@ async Task ProcessRequest(object sender, HttpRequestEventArgs e)
         }
     }
 
-    e.Reply(System.Net.HttpStatusCode.BadRequest, "Invalid Path/Method");
+    e.Reply(new HttpResponse(System.Net.HttpStatusCode.BadRequest, "Invalid Path/Method"));
 }

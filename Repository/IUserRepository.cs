@@ -13,7 +13,7 @@ public interface IUserRepository
     public Task<bool> ExistsByUsernameAsync(string username);
     public Task<bool> HasCardFromIdAsync(User user, string cardId);
     public Task<bool> HasCardsFromIdsAsync(User user, List<string> cardIds);
-    public Task<bool> AuthorizeUserAsync(string username, string password);
+    public Task<bool> AuthorizeUserAsync(UserCredentials providedCredentials);
     public Task CreateUserAsync(User user);
     public Task UpdateUserAsync(User user);
 }

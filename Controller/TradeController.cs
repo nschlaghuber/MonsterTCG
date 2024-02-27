@@ -28,19 +28,21 @@ public class TradeController : Controller
         try
         {
             var pathParts = e.Request.Path.TrimStart('/').Split('/');
+
+            HttpResponse? response;
             switch (pathParts)
             {
                 case ["tradings"] when e.Request.Method == HttpMethod.GET:
-                    GetAllTrades(e);
+                    e.Reply(await GetAllTrades(e.Request));
                     return true;
                 case ["tradings"] when e.Request.Method == HttpMethod.POST:
-                    CreateTrade(e);
+                    e.Reply(await CreateTrade(e.Request));
                     return true;
                 case ["tradings", var tradeId] when e.Request.Method == HttpMethod.DELETE:
-                    DeleteTrade(e, tradeId);
+                    e.Reply(await DeleteTrade(e.Request, tradeId));
                     return true;
                 case ["tradings", var tradeId] when e.Request.Method == HttpMethod.POST:
-                    DoTrade(e, tradeId);
+                    e.Reply(await DoTrade(e.Request, tradeId));
                     return true;
                 default:
                     return false;
@@ -48,56 +50,51 @@ public class TradeController : Controller
         }
         catch (Exception)
         {
-            e.Reply(HttpStatusCode.InternalServerError, "An unknown error has occured");
+            e.Reply(new HttpResponse(HttpStatusCode.InternalServerError, "An unknown error has occured"));
             return true;
         }
     }
 
-    public async void GetAllTrades(HttpRequest request)
+    public async Task<HttpResponse> GetAllTrades(HttpRequest request)
     {
-        var token = httpRequestEventArgs.GetBearerToken();
+        var token = request.GetBearerToken();
 
         if (token is null)
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
-            return;
+            return new HttpResponse(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
         }
 
         var authenticatedUser = await _userRepository.FindByUsernameAsync(TokenUtil.GetUsernameFromToken(token));
 
         if (authenticatedUser is null)
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
-            return;
+            return new HttpResponse(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
         }
 
         var allTrades = (await _tradeRepository.AllAsync()).ToList();
 
         if (!allTrades.Any())
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.NoContent, null);
-            return;
+            return new HttpResponse(HttpStatusCode.NoContent, null);
         }
 
-        httpRequestEventArgs.Reply(HttpStatusCode.OK, JsonConvert.SerializeObject(allTrades, Formatting.Indented));
+        return new HttpResponse(HttpStatusCode.OK, JsonConvert.SerializeObject(allTrades, Formatting.Indented));
     }
 
-    public async void CreateTrade(HttpRequest request)
+    public async Task<HttpResponse> CreateTrade(HttpRequest request)
     {
-        var token = httpRequestEventArgs.GetBearerToken();
+        var token = request.GetBearerToken();
 
         if (token is null)
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
-            return;
+            return new HttpResponse(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
         }
 
         var authenticatedUser = await _userRepository.FindByUsernameAsync(TokenUtil.GetUsernameFromToken(token));
 
         if (authenticatedUser is null)
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
-            return;
+            return new HttpResponse(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
         }
 
         CreateTrade? createTrade;
@@ -112,18 +109,16 @@ public class TradeController : Controller
             MissingMemberHandling = MissingMemberHandling.Error,
         };
 
-        createTrade = JsonConvert.DeserializeObject<CreateTrade>(httpRequestEventArgs.Request.Payload, settings);
+        createTrade = JsonConvert.DeserializeObject<CreateTrade>(request.Payload, settings);
 
         if (createTrade is null)
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.BadRequest, "Trade missing or invalid");
-            return;
+            return new HttpResponse(HttpStatusCode.BadRequest, "Trade missing or invalid");
         }
 
         if (await _tradeRepository.ExistsByIdAsync(createTrade.Id))
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.Conflict, "A deal with this deal ID already exists");
-            return;
+            return new HttpResponse(HttpStatusCode.Conflict, "A deal with this deal ID already exists");
         }
 
         var cardToTrade = await _cardRepository.FindCardByIdAsync(createTrade.CardToTrade);
@@ -132,8 +127,7 @@ public class TradeController : Controller
             !await _userRepository.HasCardFromIdAsync(authenticatedUser, cardToTrade!.Id) ||
             TupleUtil.GetListFromTuple<Card>(authenticatedUser.Deck.Cards).Contains(cardToTrade))
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.Forbidden, "The deal contains a card that is not owned by the user or locked in the deck");
-            return;
+            return new HttpResponse(HttpStatusCode.Forbidden, "The deal contains a card that is not owned by the user or locked in the deck");
         }
 
         var trade = Trade.Create(
@@ -145,62 +139,56 @@ public class TradeController : Controller
 
         await _tradeRepository.CreateTradeAsync(trade, authenticatedUser.Id);
 
-        httpRequestEventArgs.Reply(HttpStatusCode.Created, "Trading deal successfully created");
+        return new HttpResponse(HttpStatusCode.Created, "Trading deal successfully created");
     }
 
-    public async void DeleteTrade(HttpRequest request, string tradeId)
+    public async Task<HttpResponse> DeleteTrade(HttpRequest request, string tradeId)
     {
-        var token = httpRequestEventArgs.GetBearerToken();
+        var token = request.GetBearerToken();
 
         if (token is null)
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
-            return;
+            return new HttpResponse(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
         }
 
         var authenticatedUser = await _userRepository.FindByUsernameAsync(TokenUtil.GetUsernameFromToken(token));
 
         if (authenticatedUser is null)
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
-            return;
+            return new HttpResponse(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
         }
 
         var trade = await _tradeRepository.FindTradeByIdAsync(tradeId);
 
         if (trade is null)
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.NotFound, "Trade with provided id was not found");
-            return;
+            return new HttpResponse(HttpStatusCode.NotFound, "Trade with provided id was not found");
         }
 
         if (!authenticatedUser.ActiveTrades.Contains(trade))
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.Forbidden, "Trade contains card not owned by the user");
-            return;
+            return new HttpResponse(HttpStatusCode.Forbidden, "Trade contains card not owned by the user");
         }
 
         await _tradeRepository.DeleteTradeByIdAsync(trade.Id);
         
-        httpRequestEventArgs.Reply(HttpStatusCode.OK, "Trade was deleted successfully");
+        return new HttpResponse(HttpStatusCode.OK, "Trade was deleted successfully");
     }
 
-    public async void DoTrade(HttpRequest request, string tradeId)
+    public async Task<HttpResponse> DoTrade(HttpRequest request, string tradeId)
     {
-        var token = httpRequestEventArgs.GetBearerToken();
+        var token = request.GetBearerToken();
 
         if (token is null)
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
-            return;
+            return new HttpResponse(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
         }
 
         var authenticatedUser = await _userRepository.FindByUsernameAsync(TokenUtil.GetUsernameFromToken(token));
 
         if (authenticatedUser is null)
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
-            return;
+            return new HttpResponse(HttpStatusCode.Unauthorized, "Access token is missing or invalid");
         }
         
         string? offeredCardId;
@@ -215,53 +203,46 @@ public class TradeController : Controller
             MissingMemberHandling = MissingMemberHandling.Error,
         };
 
-        offeredCardId = JsonConvert.DeserializeObject<string>(httpRequestEventArgs.Request.Payload, settings);
+        offeredCardId = JsonConvert.DeserializeObject<string>(request.Payload, settings);
 
         if (offeredCardId is null)
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.BadRequest, "Card id missing or invalid");
-            return;
+            return new HttpResponse(HttpStatusCode.BadRequest, "Card id missing or invalid");
         }
 
         var offeredCard = await _cardRepository.FindCardByIdAsync(offeredCardId);
 
         if (offeredCard is null)
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.BadRequest, "The offered card does not exist");
-            return;
+            return new HttpResponse(HttpStatusCode.BadRequest, "The offered card does not exist");
         }
 
         if (!await _userRepository.HasCardFromIdAsync(authenticatedUser, offeredCard.Id))
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.Forbidden, "The offered card is not owned by the user");
-            return;
+            return new HttpResponse(HttpStatusCode.Forbidden, "The offered card is not owned by the user");
         }
 
         if (TupleUtil.GetListFromTuple<Card>(authenticatedUser.Deck.Cards).Contains(offeredCard))
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.Forbidden, "The offered card is locked in the user's deck");
-            return;
+            return new HttpResponse(HttpStatusCode.Forbidden, "The offered card is locked in the user's deck");
         }
 
         var trade = await _tradeRepository.FindTradeByIdAsync(tradeId);
 
         if (trade is null)
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.NotFound, "Trade with provided id was not found");
-            return;
+            return new HttpResponse(HttpStatusCode.NotFound, "Trade with provided id was not found");
         }
 
         if (authenticatedUser.Id == await _tradeRepository.FindCreatorUserIdByTradeId(trade.Id))
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.Forbidden, "User cannot trade with himself");
-            return;
+            return new HttpResponse(HttpStatusCode.Forbidden, "User cannot trade with himself");
         }
 
         if (offeredCard.CardType != trade.Type ||
             offeredCard.Damage < trade.MinimumDamage)
         {
-            httpRequestEventArgs.Reply(HttpStatusCode.Forbidden, "The offered card does not meet the trade requirements");
-            return;
+            return new HttpResponse(HttpStatusCode.Forbidden, "The offered card does not meet the trade requirements");
         }
 
         var tradeCreatorId = (await _tradeRepository.FindCreatorUserIdByTradeId(trade.Id))!;
@@ -276,6 +257,6 @@ public class TradeController : Controller
         await _userRepository.UpdateUserAsync(authenticatedUser);
         await _tradeRepository.DeleteTradeByIdAsync(trade.Id);
         
-        httpRequestEventArgs.Reply(HttpStatusCode.OK, "Trading deal successfully executed");
+        return new HttpResponse(HttpStatusCode.OK, "Trading deal successfully executed");
     }
 }

@@ -64,12 +64,14 @@ public class BattleService : IBattleService
 
         var log = new StringBuilder();
 
-        // Ease of access, player 1 is not "player 0" and so on
-        var player = new List<Player>
+        var playerRequest = new List<BattleRequest>
         {
-            new(player1Request.BattlingUser, player1Request.Bet),
-            new(player2Request.BattlingUser, player2Request.Bet),
+            player1Request,
+            player2Request
         };
+
+        // Ease of access, player 1 is not "player 0" and so on
+        var player = playerRequest.Select(request => new Player(request.BattlingUser, request.Bet)).ToList();
 
         log.AppendLine($"{player[0].Name} vs {player[1].Name}");
         log.AppendLine();
@@ -89,9 +91,10 @@ public class BattleService : IBattleService
                 CalculateDamage(drawnCard[0], drawnCard[1]),
                 CalculateDamage(drawnCard[1], drawnCard[0]),
             };
-            
+
             log.AppendLine();
-            log.Append($"{player[0].Name}: {drawnCard[0].Name} ({drawnCard[0].Damage} Damage) vs {player[1].Name}: {drawnCard[1].Name} ({drawnCard[1].Damage} Damage) => ");
+            log.Append(
+                $"{player[0].Name}: {drawnCard[0].Name} ({drawnCard[0].Damage} Damage) vs {player[1].Name}: {drawnCard[1].Name} ({drawnCard[1].Damage} Damage) => ");
             if (calculatedCardDamage.Min() != calculatedCardDamage.Max())
             {
                 var winningCard = calculatedCardDamage.IndexOf(calculatedCardDamage.Max());
@@ -100,12 +103,15 @@ public class BattleService : IBattleService
                 player[losingCard].Deck.Remove(drawnCard[losingCard]);
                 player[winningCard].Deck.Add(drawnCard[losingCard]);
 
-                log.AppendLine($"{drawnCard[winningCard].Name} ({calculatedCardDamage[winningCard]}) defeats {drawnCard[losingCard].Name} ({calculatedCardDamage[losingCard]})");
-                log.AppendLine($"{player[winningCard].Name} steals {player[losingCard].Name}'s {drawnCard[losingCard].Name} and now has {player[winningCard].Deck.Count} cards");
+                log.AppendLine(
+                    $"{drawnCard[winningCard].Name} ({calculatedCardDamage[winningCard]}) defeats {drawnCard[losingCard].Name} ({calculatedCardDamage[losingCard]})");
+                log.AppendLine(
+                    $"{player[winningCard].Name} steals {player[losingCard].Name}'s {drawnCard[losingCard].Name} and now has {player[winningCard].Deck.Count} cards");
             }
             else
             {
-                log.AppendLine($"{calculatedCardDamage[0]} vs {calculatedCardDamage[1]} => Draw, decks remain unchanged");
+                log.AppendLine(
+                    $"{calculatedCardDamage[0]} vs {calculatedCardDamage[1]} => Draw, decks remain unchanged");
             }
         }
 
@@ -122,12 +128,13 @@ public class BattleService : IBattleService
         }
 
         var acquiredBets = player
-            .Select(p => draw ? 0 : p == player[winner] ? (int)player[loser].Bet : -(int)player[loser].Bet).ToList();
+            .Select(p => draw ? 0 :
+                p == player[winner] ? Math.Min((int)player[loser].Bet, playerRequest[loser].BattlingUser.Coins) :
+                -Math.Min((int)player[loser].Bet, playerRequest[loser].BattlingUser.Coins)
+            ).ToList();
 
         var acquiredEloScore = player.Select(p =>
-            draw ? 0 : 
-            p == player[winner] ? 
-                3 : -5).ToList();
+            draw ? 0 : p == player[winner] ? 3 : -5).ToList();
 
 
         log.AppendLine();
