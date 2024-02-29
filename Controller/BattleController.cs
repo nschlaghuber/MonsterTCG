@@ -15,14 +15,12 @@ namespace MonsterTCG.Controller;
 
 public class BattleController : Controller
 {
-    private readonly IBattleRepository _battleRepository;
     private readonly IUserRepository _userRepository;
     private readonly IBattleService _battleService;
 
-    public BattleController(IBattleRepository battleRepository, IUserRepository userRepository,
+    public BattleController(IUserRepository userRepository,
         IBattleService battleService)
     {
-        _battleRepository = battleRepository;
         _userRepository = userRepository;
         _battleService = battleService;
     }
@@ -73,7 +71,7 @@ public class BattleController : Controller
 
         return new HttpResponse(HttpStatusCode.OK,
             JsonConvert.SerializeObject(
-                new GetUserStats(
+                new ScoreboardItem(
                     authenticatedUser.Username,
                     authenticatedUser.UserStats.EloScore,
                     authenticatedUser.UserStats.Wins,
@@ -140,7 +138,7 @@ public class BattleController : Controller
             return;
         }
 
-        if (!Enum.TryParse<Bet>(betJToken!.ToString(), out var bet))
+        if (!Enum.TryParse<Bet>(betJToken!.ToString(), out var bet) || !Enum.IsDefined(typeof(Bet), bet))
         {
             onFinished(new HttpResponse(HttpStatusCode.BadRequest,
                 "Possible bets are: None (0), Small (5), Medium (10), Large (20), Huge (50), AllIn"));

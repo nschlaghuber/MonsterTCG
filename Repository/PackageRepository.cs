@@ -44,7 +44,7 @@ namespace MonsterTCG.Repository
             }))?.ToList();
 
             return packageCards is not null
-                ? new Package(findPackageReader.GetString(0), packageCards[0], packageCards[1], packageCards[2],
+                ? Package.Create(findPackageReader.GetString(0), packageCards[0], packageCards[1], packageCards[2],
                     packageCards[3], packageCards[4])
                 : null;
         }
@@ -80,7 +80,7 @@ namespace MonsterTCG.Repository
             }))?.ToList();
 
             return packageCards is null
-                ? new Package(findPackageReader.GetString(0), packageCards[0], packageCards[1], packageCards[2],
+                ? Package.Create(findPackageReader.GetString(0), packageCards[0], packageCards[1], packageCards[2],
                     packageCards[3], packageCards[4])
                 : null;
         }
@@ -103,7 +103,7 @@ namespace MonsterTCG.Repository
                     findFirstPackageReader.GetString(5),
                 }))!.ToList();
 
-                return new Package(
+                return Package.Create(
                 findFirstPackageReader.GetString(0),
                 cards[0],
                 cards[1],
@@ -123,16 +123,8 @@ namespace MonsterTCG.Repository
 
         public async Task CreatePackageAsync(Package package)
         {
-            var cardsToAdd = package.CardList;
 
-            var existingCards = (await _cardRepository.FindCardsByIdsAsync(package.CardList.Select(c => c.Id)))?.ToList();
-
-            if (existingCards is null)
-            {
-                cardsToAdd = package.CardList.Except(existingCards).ToList();
-            }
-
-            await _cardRepository.CreateCardsAsync(cardsToAdd);
+            await _cardRepository.CreateCardsAsync(package.CardList);
 
             await using var connection = await _dataSource.OpenConnectionAsync();
             await using var createPackageCommand = new NpgsqlCommand(

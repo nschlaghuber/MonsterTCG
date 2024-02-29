@@ -30,7 +30,6 @@ await tableBuilder.EnsureTablesExists();
 var repositories = new List<object>
 {
     new CardRepository(dataSource),
-    new BattleRepository(dataSource),
 };
 repositories.Add(new TradeRepository(dataSource, repositories.OfType<ICardRepository>().First()));
 repositories.Add(new UserRepository(dataSource, 
@@ -47,11 +46,11 @@ var controllers = new List<Controller>
 {
     new UserController(repositories.OfType<IUserRepository>().First()),
     new PackageController(repositories.OfType<IPackageRepository>().First(),
+        repositories.OfType<ICardRepository>().First(),
         repositories.OfType<IUserRepository>().First()),
     new CardController(repositories.OfType<ICardRepository>().First(),
         repositories.OfType<IUserRepository>().First()),
-    new BattleController(repositories.OfType<IBattleRepository>().First(),
-        repositories.OfType<IUserRepository>().First(),
+    new BattleController(repositories.OfType<IUserRepository>().First(),
         services.OfType<IBattleService>().First()),
     new TradeController(repositories.OfType<ITradeRepository>().First(),
         repositories.OfType<IUserRepository>().First(),

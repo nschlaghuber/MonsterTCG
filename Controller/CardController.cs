@@ -110,19 +110,14 @@ public class CardController : Controller
             return new HttpResponse(HttpStatusCode.NoContent, "Deck is empty");
         }
 
-        var responseMessage = "";
-
-        switch (formatType)
-        {
-            case FormatType.Json:
-                responseMessage = JsonConvert.SerializeObject(authenticatedUser.DeckCardsAsList, Formatting.Indented);
-                break;
-            case FormatType.Plain:
-                responseMessage = string.Join(", ", authenticatedUser.DeckCardsAsList.Select(card => card!.Name));
-                break;
-        }
-        
-        return new HttpResponse(HttpStatusCode.OK, responseMessage, formatType);
+        return new HttpResponse(HttpStatusCode.OK, 
+            formatType switch
+            {
+                FormatType.Json => JsonConvert.SerializeObject(authenticatedUser.DeckCardsAsList, Formatting.Indented),
+                FormatType.Plain => string.Join(", ", authenticatedUser.DeckCardsAsList.Select(card => card!.Name)),
+                _ => throw new ArgumentOutOfRangeException(nameof(formatType), formatType, null)
+            }, 
+            formatType);
     }
 
     public async Task<HttpResponse> ConfigureDeck(HttpRequest request)
@@ -147,7 +142,7 @@ public class CardController : Controller
         {
             return new HttpResponse(HttpStatusCode.BadRequest, "The provided deck did not include the required amount of cards");
         }
-
+        
         if (!await _userRepository.HasCardsFromIdsAsync(authenticatedUser, cardIds))
         {
             return new HttpResponse(HttpStatusCode.Forbidden, "At least one of the provided cards does not belong to the user or is not available.");

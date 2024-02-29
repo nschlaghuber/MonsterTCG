@@ -14,11 +14,14 @@ namespace MonsterTCG.Controller
     public class PackageController : Controller
     {
         private readonly IPackageRepository _packageRepository;
+        private readonly ICardRepository _cardRepository;
         private readonly IUserRepository _userRepository;
 
-        public PackageController(IPackageRepository packageRepository, IUserRepository userRepository)
+        public PackageController(IPackageRepository packageRepository, ICardRepository cardRepository,
+            IUserRepository userRepository)
         {
             _packageRepository = packageRepository;
+            _cardRepository = cardRepository;
             _userRepository = userRepository;
         }
 
@@ -48,7 +51,7 @@ namespace MonsterTCG.Controller
             }
         }
 
-        private async Task<HttpResponse> AcquirePackage(HttpRequest request)
+        public async Task<HttpResponse> AcquirePackage(HttpRequest request)
         {
             var token = request.GetBearerToken();
 
@@ -81,17 +84,17 @@ namespace MonsterTCG.Controller
 
             authenticatedUser.SetCoins(authenticatedUser.Coins - 5);
 
-            await _userRepository.UpdateUserAsync(authenticatedUser);
-
             if (!await _packageRepository.DeletePackageByIdAsync(package.PackageId))
             {
                 return new HttpResponse(HttpStatusCode.InternalServerError, "An unknown error has occured");
             }
 
+            await _userRepository.UpdateUserAsync(authenticatedUser);
+
             return new HttpResponse(HttpStatusCode.OK, "A package has been successfully bought");
         }
 
-        private async Task<HttpResponse> CreatePackage(HttpRequest request)
+        public async Task<HttpResponse> CreatePackage(HttpRequest request)
         {
             var token = request.GetBearerToken();
 
@@ -138,20 +141,20 @@ namespace MonsterTCG.Controller
                     )
                 ).ToList();
 
-            if (await _packageRepository.ExistsByCardIdsAsync(
-                    (
+            if (await _cardRepository.ExistAnyByIdsAsync(new List<string>
+                    {
                         packageCards[0].Id,
                         packageCards[1].Id,
                         packageCards[2].Id,
                         packageCards[3].Id,
                         packageCards[4].Id
-                    )
+                    }
                 ))
             {
-                return new HttpResponse(HttpStatusCode.Conflict, "Package with the same cards already created");
+                return new HttpResponse(HttpStatusCode.Conflict, "At least one card in the packages already exists");
             }
 
-            var package = new Package(Guid.NewGuid().ToString(),
+            var package = Package.Create(Guid.NewGuid().ToString(),
                 packageCards[0],
                 packageCards[1],
                 packageCards[2],
