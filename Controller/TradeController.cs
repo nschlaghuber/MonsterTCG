@@ -214,7 +214,7 @@ public class TradeController : Controller
 
         if (offeredCard is null)
         {
-            return new HttpResponse(HttpStatusCode.BadRequest, "The offered card does not exist");
+            return new HttpResponse(HttpStatusCode.NotFound, "The offered card does not exist");
         }
 
         if (!await _userRepository.HasCardFromIdAsync(authenticatedUser, offeredCard.Id))

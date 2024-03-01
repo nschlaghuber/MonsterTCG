@@ -30,6 +30,7 @@ namespace MonsterTCG.Model.User
                 Deck = new Deck.Deck(Guid.NewGuid().ToString()),
                 Coins = 20,
                 UserStats = new UserStats(500, 0, 0),
+                ActiveTrades = new List<Trade.Trade>(),
             };
         }
 
